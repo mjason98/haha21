@@ -204,9 +204,10 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
             total_loss, total_acc, dl= 0,0,0
             with torch.no_grad():
                 for data in evalData_loader:
-                    y_hat, y_val = model(data['x'])
+                    # y_hat, y_val = model(data['x'])
+                    y_hat = model(data['x'])
                     y1 = data['y'].to(device=model.device)
-                    y2 = data['v'].to(device=model.device)
+                    # y2 = data['v'].to(device=model.device)
 
                     if mtl:
                         l1 = model.criterion1(y_hat, y1)
@@ -233,33 +234,61 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
 def evaluateModels(model, testData_loader, header=('id', 'is_humor', 'humor_rating'), cleaner=[], name='pred'):
     model.eval()
     
-    pred_path = os.path.join('preds', name+'.csv')
+    pred_path = os.path.join('out', name+'.csv')
 
     bar = MyBar('test', max=len(testData_loader))
     Ids, lab, val = [], [], []
     
     cpu0 = torch.device("cpu")
+    # with torch.no_grad():
+    #     for data in testData_loader:
+    #         y_hat, y_val = model(data['x'])
+    #         y_hat, y_val = y_hat.to(device=cpu0), y_val.to(device=cpu0)
+            
+    #         y_hat = y_hat.argmax(dim=-1).squeeze()
+    #         y_val = y_val.squeeze() * y_hat
+    #         ids = data['id'].squeeze()
+            
+    #         for i in range(ids.shape[0]):
+    #             Ids.append(ids[i].item())
+    #             lab.append(y_hat[i].item())
+    #             val.append(y_val[i].item())
+    #         bar.next()
+    # bar.finish()
+
+    # Ids, lab, val = pd.Series(Ids), pd.Series(lab), pd.Series(val)
+    # data = pd.concat([Ids, lab, val], axis=1)
+    # del Ids
+    # del lab
+    # del val
+    # data.to_csv(pred_path, index=None, header=header)
+    # del data
+    # print ('# Predictions saved in', colorizar(pred_path))
+    
+    # if len(cleaner) > 0:
+    #     data = pd.read_csv(pred_path)
+    #     data.drop(cleaner, axis=1, inplace=True)
+    #     data.to_csv(pred_path, index=None)
+    #     print ('# Cleaned from', ', '.join(cleaner) + '.')
+
     with torch.no_grad():
         for data in testData_loader:
-            y_hat, y_val = model(data['x'])
-            y_hat, y_val = y_hat.to(device=cpu0), y_val.to(device=cpu0)
+            y_hat = model(data['x'])
+            y_hat = y_hat.to(device=cpu0)
             
             y_hat = y_hat.argmax(dim=-1).squeeze()
-            y_val = y_val.squeeze() * y_hat
             ids = data['id'].squeeze()
             
             for i in range(ids.shape[0]):
                 Ids.append(ids[i].item())
                 lab.append(y_hat[i].item())
-                val.append(y_val[i].item())
             bar.next()
     bar.finish()
     
-    Ids, lab, val = pd.Series(Ids), pd.Series(lab), pd.Series(val)
-    data = pd.concat([Ids, lab, val], axis=1)
+    Ids, lab = pd.Series(Ids), pd.Series(lab)
+    data = pd.concat([Ids, lab], axis=1)
     del Ids
     del lab
-    del val
     data.to_csv(pred_path, index=None, header=header)
     del data
     print ('# Predictions saved in', colorizar(pred_path))
@@ -349,3 +378,78 @@ def makeTrain_and_ValData(data_path:str, percent=10, class_label=None, df='data'
 	eval_data.to_csv(eval_path, index=None)
 
 	return train_path, eval_path
+
+def convert2EncoderVec(data_name:str, model, loader, save_pickle=False, save_as_numpy=False, df='data'):
+    model.eval()
+    IDs, YC, YV, X = [], [], [], []
+
+    new_name = os.path.join('data', data_name+'.csv' if not save_pickle else data_name+'.pkl')
+
+    print ('# Creating', colorizar(os.path.basename(new_name)))
+    bar = MyBar('change', max=len(loader))
+
+    cpu0 = torch.device("cpu")
+    with torch.no_grad():
+        for data in loader:
+            x = model(data['x'], ret_vec=True).to(device=cpu0).numpy()
+            try:
+                y_c = data['y']
+            except:
+                y_c = None
+            
+            try:
+                y_v = data['v']
+            except:
+                y_v = None
+            
+            try:
+                ids = data['id']
+            except:
+                ids = None
+
+            for i in range(x.shape[0]):
+                l = x[i,:].tolist()
+                X.append(' '.join([str(v) for v in l]))
+                if y_c is not None:
+                    YC.append(int(y_c[i].item()))
+                if y_v is not None:
+                    YV.append(y_v[i].item())
+                if ids is not None:
+                    IDs.append(ids[i].item())
+            bar.next()
+    bar.finish()
+
+    if save_as_numpy:
+        X_t = [v for v in map(lambda x: [float(s) for s in x.split()], X)]
+        X_t = np.array(X_t, dtype=np.float32)
+        np.save(os.path.join('data', data_name+'.npy'), X_t)
+        del X_t
+        
+        if len(IDs) > 0:
+            ids_t = np.array([int(i) for i in IDs], dtype=np.int64)
+            np.save(os.path.join('data', data_name+'_id.npy'), ids_t)
+            del ids_t
+
+    conca, n_head = [], []
+    if len(IDs) > 0:
+        conca.append(pd.Series(IDs))
+        n_head.append('id')
+        del IDs
+    if len(YC) > 0:
+        conca.append(pd.Series(YC))
+        n_head.append('is_humor')
+        del YC
+    if len(YV) > 0:
+        conca.append(pd.Series(YV))
+        n_head.append('humor_rating')
+        del YV
+    conca.append(pd.Series(X))
+    n_head.append('vecs')
+    del X
+
+    data = pd.concat(conca, axis=1)
+    if save_pickle:
+        data.to_pickle(new_name)
+    else:
+        data.to_csv(new_name, index=None, header=n_head)
+    return new_name
