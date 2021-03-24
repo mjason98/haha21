@@ -232,22 +232,23 @@ def projectData2D(data_path:str, save_name='2Data', use_centers=False):
 
 	np_data = data.drop(['is_humor','humor_rating', 'id'], axis=1).to_numpy().tolist()
 	np_data = [i for i in map(lambda x: [float(v) for v in x[0].split()], np_data)]
-	np_data = np.array(np_data, dtype=np.float32)
+	np_data = np.array(np_data, dtype=np.float32) 
 
-	L = []
+	L1, L2 = [], []
 	if use_centers:
-		P = ['neg_center.txt', 'pos_center.txt']
-		for l in P:
+		P = [['neg_center.txt', L1], ['pos_center.txt', L2]]
+		for l,st in P:
 			with open(os.path.join('data', l), 'r') as file:
 				lines = file.readlines()
 				lines = np.array([[float(v) for v in x.split()] for x in lines], dtype=np.float32)
-				L.append(lines)
-	L = np.concatenate(L, axis=0)
+				st.append(lines)
+	L1 = np.concatenate(L1, axis=0)
+	L2 = np.concatenate(L2, axis=0)
 	# axes.scatter(lines[:,0], lines[:,1], c='r')
 
 	print ('Projecting', colorizar(os.path.basename(data_path)), 'in 2d vectors')
-	np_data = np.concatenate([np_data, L], axis=0)
-	L = L.shape[0]
+	np_data = np.concatenate([np_data, L1, L2], axis=0)
+	L1, L2 = L1.shape[0], L2.shape[0]
 
 	X_embb = TSNE(n_components=2).fit_transform(np_data)
 	#X_embb = PCA(n_components=2, svd_solver='full').fit_transform(np_data)
@@ -261,19 +262,26 @@ def projectData2D(data_path:str, save_name='2Data', use_centers=False):
 			D_1.append([X_embb[i,0], X_embb[i,1]])
 		else:
 			D_2.append([X_embb[i,0], X_embb[i,1]])
-	X_embb = X_embb[-L:]
+	X_embb_1 = X_embb[-(L1+L2):-L2]
+	X_embb_2 = X_embb[-L2:]
+	del X_embb
 
 	D_1, D_2 = np.array(D_1), np.array(D_2)
 	fig , axes = plt.subplots()
-	axes.scatter(D_1[:,0], D_1[:,1], label='neg', c='gray', alpha=0.5)
-	axes.scatter(D_2[:,0], D_2[:,1], label='pos', c='b', alpha=0.5)
+	axes.scatter(D_1[:,0], D_1[:,1], label=r'$N~class$', color=(255/255, 179/255, 128/255, 1.0))
+	axes.scatter(D_2[:,0], D_2[:,1], label=r'$P~class$', color=(135/255, 222/255, 205/255, 1.0))
 
-	axes.scatter(X_embb[:,0], X_embb[:,1], label='centers', c='r', alpha=0.5)
+	axes.scatter(X_embb_1[:,0], X_embb_1[:,1], label=r'$N_{Set}$', color=(211/255, 95/255, 95/255, 1.0), marker='s')
+	axes.scatter(X_embb_2[:,0], X_embb_2[:,1], label=r'$P_{Set}$', color=(0/255, 102/255, 128/255, 1.0), marker='s')
 
 	fig.legend()
+	fig.tight_layout()
+	axes.axis('off')
 	fig.savefig(os.path.join('pics', save_name+'.png'))
 	# plt.show()
 	del fig
 	del axes
-	del X_embb
+	del X_embb_1
+	del X_embb_2
+	
 	
