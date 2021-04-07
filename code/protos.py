@@ -328,8 +328,8 @@ def __prototypes_with_dql(params):
     env = VecDataEnvironment(params['data_path'], eval_path=params['eval_data_path'], max_backpack_size=BACKPACK_SIZE, vname=params['vcolumn'], lname=params['lcolumn'])
     DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
-    # max_len : 20000, antes BACKPACK_SIZE+11, de esta forma quisas se adapte a ir cresiendo poco a poco
-    Qmodel = Agent_DQL(BACKPACK_SIZE+1, nhead=params['nhead'],nhid=params['nhid'],d_model=DMODEL,nlayers=params['n_layers'], max_len=20000,dropout=params['dropout']).to(device=DEVICE)
+    # max_len : 5000, antes BACKPACK_SIZE+11, de esta forma quisas se adapte a ir cresiendo poco a poco
+    Qmodel = Agent_DQL(BACKPACK_SIZE+1, nhead=params['nhead'],nhid=params['nhid'],d_model=DMODEL,nlayers=params['n_layers'], max_len=5000,dropout=params['dropout']).to(device=DEVICE)
     qloss = torch.nn.MSELoss().to(device=DEVICE)
     
     # seting up the taget net, and memory replay stuff
@@ -337,7 +337,7 @@ def __prototypes_with_dql(params):
     Qtarget.load_state_dict(Qmodel.state_dict())
     replay = ExperienceReplay(N=int(params['memory_size']), batch_size=BSIZE)
 
-    icm = ICM_DQL(BACKPACK_SIZE+1, DMODEL*(BACKPACK_SIZE+1), DMODEL, max_len=BACKPACK_SIZE, forward_scale=1., inverse_scale=1e4, nhead=params['nhead'],hiden_size=params['nhid'],nlayers=params['n_layers'], dropout=params['dropout']).to(device=DEVICE)
+    icm = ICM_DQL(BACKPACK_SIZE+1, DMODEL*(BACKPACK_SIZE+1), DMODEL, max_len=5000, forward_scale=1., inverse_scale=1e4, nhead=params['nhead'],hiden_size=params['nhid'],nlayers=params['n_layers'], dropout=params['dropout']).to(device=DEVICE)
     all_model_params = list(Qmodel.parameters()) + list(icm.parameters())
     opt = torch.optim.Adam(lr=LR, params=all_model_params)
     
