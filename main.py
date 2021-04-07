@@ -2,6 +2,8 @@ import os, sys, argparse
 from code.models import setTransName, setSeed, makeDataSet, makeModels
 from code.models import trainModels, evaluateModels, makeTrain_and_ValData
 from code.models import convert2EncoderVec
+from code.utils  import projectData2D, makeParameters, parceParameter
+from code.protos import extractPrototypes
 
 # ================== PARAMETERS =============================
 
@@ -14,31 +16,48 @@ TRAIN_ENCODER    = True
 TRAIN_CENTERS    = True
 TRAIN_CMP        = True
 
-BATCH_ENCODER    = 128
-LR_ENCODER       = 5e-5
-EPOCHS_ENCODER   = 15
-HSIZE_ENCODER    = 256
-DPR_ENCODER      = 0.0
-LRFACTOR_ENCODER = 9/10
-OPTM_ENCODER     = 'adam'
-SELOP            = 'addn'
-
 # ===========================================================
 
-def check_params(arg=None):
-    global BATCH_ENCODER
-    global LR_ENCODER
-    global EPOCHS_ENCODER
-    global HSIZE_ENCODER
-    global DPR_ENCODER
-    global LRFACTOR_ENCODER
-    global OPTM_ENCODER
-    global SELOP
+params = {
+    'batch_encoder':128,
+    'lr_encoder':5e-5,
+    'epochs_encoder':15,
+    'hsize_encoder':256,
+    'dpr_encoder':0.0,
+    'lr_factor_encoder':9/10,
+    'optm_encoder':'adam', # rms
+    'selop':'addn', #first
+    'lcolumn':'is_humor', 
+    'vcolumn':'vecs', 
     
+    # Deep Reinforcement Learning Parameters ---------------
+    'max_prototypes':20,
+    'intrinsic':True, 
+    'lambda':0.1, 
+    'eta':1.0, 
+    'gamma':0.2, 
+    'eps':0.15, 
+    'beta':0.2,
+    'batch_size':64, 
+    'lr':0.001, 
+    'epochs':20, 
+    'memory_size':100,
+    
+    'dropout':0.1,
+    'nhead':3,
+    'nhid':128,
+    'd_model':90,
+    'n_layers':3
+    # ------------------------------------------------------
+}
+
+def check_params(arg=None):
     global TEST_DATA_NAME
     global EVAL_DATA_NAME
     global TRAIN_DATA_NAME
     global TRAIN_ENCODER
+
+    global params
 
     # INFOMAP_PATH = '/DATA/work_space/2-AI/3-SemEval21/infomap-master'
     # INFOMAP_EX   = 'Infomap'
@@ -54,60 +73,39 @@ def check_params(arg=None):
     parse.add_argument('-d', dest='dev_data', help='Development Data', 
                        required=False, default=EVAL_DATA_NAME)
 
-    parse.add_argument('--lre', dest='lr_encod', help='The encoder learning rate to use in the optimizer', 
-                       required=False, default=LR_ENCODER)
-    parse.add_argument('--dpe', dest='dropout_encod', help='Dropout in the encoder', 
-                       required=False, default=DPR_ENCODER)
-    parse.add_argument('--se', dest='encod_size', help='The size of the dense layer in the encoder', 
-                       required=False, default=HSIZE_ENCODER)
-    parse.add_argument('--be', dest='batchs_encod', help='Number of batchs in the encoder training process', 
-                       required=False, default=BATCH_ENCODER)
-    parse.add_argument('--ee', dest='epochs_encod', help='Number of epochs in the encoder training process', 
-                       required=False, default=EPOCHS_ENCODER)
-    parse.add_argument('--lfe', dest='lfactor_encod', help='The learning rate factor to use in the encoder', 
-                       required=False, default=LRFACTOR_ENCODER)
-
     parse.add_argument('--seed', dest='my_seed', help='Random Seed', 
                        required=False, default=123456)
-    # parse.add_argument('--infomap-path', dest='ipath', help='Path to infomap executable', 
-    #                    required=False, default=INFOMAP_PATH)
-    # parse.add_argument('--infomap-name', dest='iname', help='Infomap executable name', 
-    #                    required=False, default=INFOMAP_EX)
     
-    parse.add_argument('--optim_e', dest='optim_encoder', help='Optimazer to use in the training process', 
-                       required=False, default=OPTM_ENCODER, choices=['adam', 'rms'])
-    # parse.add_argument('--etha', dest='etha', help='The multi task learning parameter to calculate the liner convex combination: \\math\\{loss = \\ethaL_1 + (1 - \\etha)L_2\\}', 
-    #                    required=False, default=MTL_ETHA)		
-    parse.add_argument('--trans-name', dest='trsn', help='The transformer name to pull from huggingface', 
-                       required=False, default=ONLINE_NAME)		
-    parse.add_argument('--vector-op', dest='selec', help='Operation over the last layer in the transformer to fit the last dense layer of the encoder', 
-                       required=False, default=SELOP, choices=['addn', 'first'])
+    parse.add_argument('--trans_name', dest='trsn', help='The transformer name to pull from huggingface', 
+                       required=False, default=ONLINE_NAME)
+    parse.add_argument('--parameters', dest='params', help='file containing the parameters', 
+                       required=False, default='')		
+
     parse.add_argument('--no_train_enc', help='Do not train the encoder', 
 					   required=False, action='store_false', default=True)
+    
+    parse.add_argument('--make_parameter', help='Make a file with all parameters. Use this as reference.', 
+					   required=False, action='store_true', default=False)
    
     returns = parse.parse_args(arg)
-    
-    LR_ENCODER       = float(returns.lr_encod)
-    DPR_ENCODER      = float(returns.dropout_encod)
-    HSIZE_ENCODER    = int(returns.encod_size)
-    BATCH_ENCODER    = int(returns.batchs_encod)
-    EPOCHS_ENCODER   = int(returns.epochs_encod)
-    LRFACTOR_ENCODER = float(returns.lfactor_encod)
-    
     TEST_DATA_NAME   = returns.predict
     TRAIN_DATA_NAME  = returns.train_data
     EVAL_DATA_NAME   = returns.dev_data
     
-    OPTM_ENCODER     = returns.optim_encoder
-    SELOP            = returns.selec
     ONLINE_NAME      = returns.trsn
     TRAIN_ENCODER    = bool(returns.no_train_enc)
-    
-    # Set Infomap staf
-    # INFOMAP_EX = returns.iname 
-    # INFOMAP_PATH = returns.ipath
-    # setInfomapData(INFOMAP_PATH, INFOMAP_EX)
 
+    if bool(returns.make_parameter):
+        makeParameters(params, os.path.join('parameters.txt'))
+        return 0
+    elif len(returns.params) > 0:
+        if not os.path.isfile(returns.params):
+            print ('#ERROR::parameter params \'{}\' is not a file, or not exist.'.format(returns.params))
+            return 0
+        else:
+            __parm = parceParameter(returns.params)
+            params.update(__parm)
+    
     # Set Transformers staf
     setTransName(ONLINE_NAME)
 
@@ -124,6 +122,8 @@ def check_params(arg=None):
     if not TRAIN_ENCODER and not os.path.isfile(os.path.join('pts', 'encoder.pt')):
         print('# Disabled the parameter \'--no_train_enc\'\n because there is not any checkpoint of the encoder under the name \'encoder.pt\' in folder \'pts\'')
         TRAIN_ENCODER = True
+    
+    return 1
 
 def train_encoder():
     global TEST_DATA_NAME
@@ -134,12 +134,12 @@ def train_encoder():
     TRAIN_DATA_NAME, EVAL_DATA_NAME = makeTrain_and_ValData(TRAIN_DATA_NAME, class_label='is_humor', df=DATA_FOLDER)
     # This is temporal -------------------
 
-    t_data, t_loader = makeDataSet(TRAIN_DATA_NAME, batch=BATCH_ENCODER, id_h='id', text_h='text', class_h='is_humor')
-    e_data, e_loader = makeDataSet(EVAL_DATA_NAME,  batch=BATCH_ENCODER, id_h='id', text_h='text', class_h='is_humor')
+    t_data, t_loader = makeDataSet(TRAIN_DATA_NAME, batch=int(params['batch_encoder']), id_h='id', text_h='text', class_h='is_humor')
+    e_data, e_loader = makeDataSet(EVAL_DATA_NAME,  batch=int(params['batch_encoder']), id_h='id', text_h='text', class_h='is_humor')
 
-    model = makeModels('encoder', HSIZE_ENCODER, dropout=DPR_ENCODER, max_length=64, selection=SELOP)
-    trainModels(model, t_loader, epochs=EPOCHS_ENCODER, evalData_loader=e_loader, 
-                nameu='encoder', optim=model.makeOptimizer(lr=LR_ENCODER, lr_factor=LRFACTOR_ENCODER, algorithm=OPTM_ENCODER))
+    model = makeModels('encoder', int(params['hsize_encoder']), dropout=float(params['dpr_encoder']), max_length=64, selection=str(params['selop']))
+    trainModels(model, t_loader, epochs=int(params['epochs_encoder']), evalData_loader=e_loader, 
+                nameu='encoder', optim=model.makeOptimizer(lr=float(params['lr_encoder']), lr_factor=float(params['lr_factor_encoder']), algorithm=str(params['optm_encoder'])))
 
     del t_loader
     del e_loader
@@ -148,9 +148,9 @@ def train_encoder():
 
     # Loading the best fit model
     model.load(os.path.join('pts', 'encoder.pt'))
-    data, loader     = makeDataSet(TEST_DATA_NAME, batch=BATCH_ENCODER, shuffle=False, id_h='id', text_h='text', class_h='is_humor')
-    t_data, t_loader = makeDataSet(TRAIN_DATA_NAME,batch=BATCH_ENCODER, shuffle=False, id_h='id', text_h='text', class_h='is_humor')
-    e_data, e_loader = makeDataSet(EVAL_DATA_NAME, batch=BATCH_ENCODER, shuffle=False, id_h='id', text_h='text', class_h='is_humor')
+    data, loader     = makeDataSet(TEST_DATA_NAME, batch=int(params['batch_encoder']), shuffle=False, id_h='id', text_h='text', class_h='is_humor')
+    t_data, t_loader = makeDataSet(TRAIN_DATA_NAME,batch=int(params['batch_encoder']), shuffle=False, id_h='id', text_h='text', class_h='is_humor')
+    e_data, e_loader = makeDataSet(EVAL_DATA_NAME, batch=int(params['batch_encoder']), shuffle=False, id_h='id', text_h='text', class_h='is_humor')
 
     # Make predictions using only the encoder
     evaluateModels(model, loader, name='pred_en', cleaner=[], header=('id', 'is_humor'))
@@ -168,7 +168,17 @@ def train_encoder():
     del model
 
 if __name__ == '__main__':
-    check_params(arg=sys.argv[1:])
-    
+    if check_params(arg=sys.argv[1:]) == 0:
+        exit(0)
     if TRAIN_ENCODER:
         train_encoder()
+    
+    # temporal code, delete later ---------
+    TRAIN_DATA_NAME = 'data/train_en.csv'
+    EVAL_DATA_NAME  = 'data/dev_en.csv'
+    TEST_DATA_NAME  = 'data/test_en.csv'
+    # temporal code, delete later ---------
+
+    params.update({'data_path':TRAIN_DATA_NAME, 'eval_data_path':EVAL_DATA_NAME})
+    extractPrototypes(method='dql', params=params)
+    # projectData2D(os.path.join(DATA_FOLDER, 'train_en.csv'), use_centers=True, drops=['id', 'is_humor'])

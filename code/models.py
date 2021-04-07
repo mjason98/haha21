@@ -174,16 +174,17 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
             optim.zero_grad()
             
             # Multi-Task learning for now not
-            # y_hat, y_val = model(data['x'])
-            y_hat = model(data['x'])
-            y1    = data['y'].to(device=model.device)
-            # y2 = data['v'].float().to(device=model.device)
-            
             if mtl:
+                y_hat, y_val = model(data['x'])
+                y1    = data['y'].to(device=model.device)
+                y2 = data['v'].to(device=model.device)
+
                 l1 = model.criterion1(y_hat, y1)
                 l2 = model.criterion2(y_val, y2, y1)
                 loss = etha*l1 + (1. - etha)*l2
             else:
+                y_hat = model(data['x'])
+                y1    = data['y'].to(device=model.device)
                 loss = model.criterion1(y_hat, y1)
             
             loss.backward()
@@ -329,8 +330,43 @@ class RawDataset(Dataset):
         sample = {'x': sent, 'y': y1, 'id':ids}
         return sample
 
+class VecDataset(Dataset):
+    def __init__(self, csv_file, id_h='id', text_h='vecs', class_h='is_humor'):
+        self.data_frame = pd.read_csv(csv_file)
+        self.x_name  = text_h
+        self.id_name = id_h
+        self.y1_name = class_h
+
+    def __len__(self):
+        return len(self.data_frame)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+        
+        ids  = self.data_frame.loc[idx, self.id_name]
+        sent  = self.data_frame.loc[idx, self.x_name]
+        sent = torch.Tensor([float(s) for s in sent]).float()
+        
+        try:
+            y1 = self.data_frame.loc[idx, self.y1_name]
+            # regv  = self.data_frame.loc[idx, 'humor_rating'] if int(value) != 0 else 0.
+        except:
+            y1 = 0
+            # value, regv = 0, 0.
+
+        # sample = {'x': sent, 'y': value, 'v':regv, 'id':ids}
+        sample = {'x': sent, 'y': y1, 'id':ids}
+        return sample
+
+
 def makeDataSet(csv_path:str, batch, shuffle=True, id_h='id', text_h='text', class_h='is_humor'):
     data   =  RawDataset(csv_path, id_h=id_h, text_h=text_h, class_h=class_h)
+    loader =  DataLoader(data, batch_size=batch, shuffle=shuffle, num_workers=4, drop_last=False)
+    return data, loader
+
+def makeDataSet_Vec(csv_path:str, batch, shuffle=True, id_h='id', text_h='text', class_h='is_humor'):
+    data   =  VecDataset(csv_path, id_h=id_h, text_h=text_h, class_h=class_h)
     loader =  DataLoader(data, batch_size=batch, shuffle=shuffle, num_workers=4, drop_last=False)
     return data, loader
 
