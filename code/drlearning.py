@@ -84,6 +84,9 @@ class Agent_DQL(torch.nn.Module):
         self.decoder = torch.nn.Linear(d_model, naction)
         self.init_weights()
 
+        self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        self.to(device=self.device)
+
     def init_weights(self):
         initrange = 0.1
         self.decoder.bias.data.zero_()
@@ -143,9 +146,12 @@ class Fnet(torch.nn.Module): # forward model
         self.linear2 = torch.nn.Linear(v1,v2)
         self.linear3 = torch.nn.Linear(v2,size)
         self.actions = actions
+        self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        self.to(device=self.device)
+
     def forward(self, state, action):
         action_ = torch.zeros(action.shape[0],self.actions) # converta actions to one hot
-        indices = torch.stack((torch.arange(action.shape[0]), action.squeeze()), dim=0)
+        indices = torch.stack((torch.arange(action.shape[0]).to(device=self.device), action.squeeze().to(device=self.device)), dim=0)
         indices = indices.tolist()
         action_[indices] = 1. 
 
@@ -167,6 +173,9 @@ class ICM(torch.nn.Module):
 
         self.forward_loss = torch.nn.MSELoss(reduction='none')
         self.inverse_loss = torch.nn.CrossEntropyLoss(reduction='none')
+
+        self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        self.to(device=self.device)
     
     def forward(self, state1, action, state2):
         state1_hat = self.encoder(state1)
