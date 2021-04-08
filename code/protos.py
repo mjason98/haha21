@@ -300,7 +300,7 @@ def __minibatch_train_dql(Qmodel, Qtarget, qloss, replay, params, DEVICE, icm=No
     
     reward_pred = Qmodel(state1_batch)
     reward_target = reward_pred.clone()
-    indices = torch.stack((torch.arange(action_batch.shape[0]),action_batch.squeeze()), dim=0)
+    indices = torch.stack((torch.arange(action_batch.shape[0]).to(device=DEVICE),action_batch.squeeze().to(device=DEVICE)), dim=0)
     indices = indices.tolist()
     reward_target[indices] = reward.squeeze()
     q_loss = 1e5 * qloss(F.normalize(reward_pred), F.normalize(reward_target.detach()))
