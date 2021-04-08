@@ -155,7 +155,7 @@ class Fnet(torch.nn.Module): # forward model
         indices = indices.tolist()
         action_[indices] = 1. 
 
-        x = torch.cat((state,action_), dim=1)
+        x = torch.cat((state.to(device=self.device),action_.to(device=self.device)), dim=1)
         y = F.relu(self.linear1(x))
         y = F.relu(self.linear2(y))
         y = self.linear3(y)
