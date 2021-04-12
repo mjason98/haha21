@@ -19,6 +19,11 @@ def strToListF(cad:str, sep=' '):
 def strToListI(cad:str, sep=' '):
 	return [int(s) for s in cad.split(sep)]
 
+def getSTime(time_sec):
+	mon, sec = divmod(time_sec, 60)
+	hr, mon = divmod(mon, 60)
+	return "{:02.0f}:{:02.0f}:{:02.0f}".format(hr,mon,sec)
+
 class MyBar(Bar):
 	empty_fill = '.'
 	fill = '='
@@ -194,6 +199,30 @@ def parceParameter(file):
 			__sol.append((name, value))
 	return dict(__sol)
 
+def plot_loos_np(path, smood=False, win=10):
+	losses_ = np.load(path)
+	plt.figure(figsize=(8,6))
+
+	if smood:
+		mean_losses_ = np.zeros_like(losses_)
+		for i in range(losses_.shape[0]):
+			i_min, i_max = max(i-win, 0), min(losses_.shape[0], i+win)
+			mean_losses_[i,0] = losses_[i_min:i_max,0].mean()
+			mean_losses_[i,1] = losses_[i_min:i_max,1].mean()
+			mean_losses_[i,2] = losses_[i_min:i_max,2].mean()
+		plt.plot(np.log(losses_[:,0]),label='Q loss', alpha=0.3, c='b')
+		plt.plot(np.log(losses_[:,1]),label='Forward loss', alpha=0.3, c='orange')
+		plt.plot(np.log(losses_[:,2]),label='Inverse loss', alpha=0.3, c='green')
+		plt.plot(np.log(mean_losses_[:,0]), c='b')
+		plt.plot(np.log(mean_losses_[:,1]), c='orange')
+		plt.plot(np.log(mean_losses_[:,2]), c='green')
+	else:
+		plt.plot(np.log(losses_[:,0]),label='Q loss')
+		plt.plot(np.log(losses_[:,1]),label='Forward loss')
+		plt.plot(np.log(losses_[:,2]),label='Inverse loss')
+	plt.legend()
+	plt.show()
+
 def makeVocabFromData(filepath):
 	'''
 	Make a vocabulary from a file
@@ -228,18 +257,21 @@ def projectData2D(data_path:str, save_name='2Data', drops = ['is_humor','humor_r
 
 	L1, L2 = 0, 0
 	if use_centers:
-		L1, L2 = [], []
-		P = [['neg_center.txt', L1], ['pos_center.txt', L2]]
-		for l,st in P:
-			with open(os.path.join('data', l), 'r') as file:
-				lines = file.readlines()
-				lines = np.array([[float(v) for v in x.split()] for x in lines], dtype=np.float32)
-				st.append(lines)
-		L1 = np.concatenate(L1, axis=0)
-		L2 = np.concatenate(L2, axis=0)	
+		# L1, L2 = [], []
+		# P = [['neg_center.txt', L1], ['pos_center.txt', L2]]
+		# for l,st in P:
+		# 	with open(os.path.join('data', l), 'r') as file:
+		# 		lines = file.readlines()
+		# 		lines = np.array([[float(v) for v in x.split()] for x in lines], dtype=np.float32)
+		# 		st.append(lines)
+		# L1 = np.concatenate(L1, axis=0)
+		# L2 = np.concatenate(L2, axis=0)	
+		L1 = np.load(os.path.join('data', 'neg_center.npy'))
+		L2 = np.load(os.path.join('data', 'pos_center.npy'))
+
 		np_data = np.concatenate([np_data, L1, L2], axis=0)
 		L1, L2 = L1.shape[0], L2.shape[0]
-	print ('# Projecting', colorizar(os.path.basename(data_path)), 'in 2d vectors')
+	print ('# Projecting', colorizar(os.path.basename(data_path)), 'in 2d vectors', end='')
 	X_embb = TSNE(n_components=2).fit_transform(np_data)
 	#X_embb = PCA(n_components=2, svd_solver='full').fit_transform(np_data)
 	#X_embb = TruncatedSVD(n_components=2).fit_transform(np_data)

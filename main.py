@@ -1,7 +1,8 @@
 import os, sys, argparse
 from code.models import setTransName, setSeed, makeDataSet, makeModels
 from code.models import trainModels, evaluateModels, makeTrain_and_ValData
-from code.models import convert2EncoderVec
+from code.models import convert2EncoderVec, predictWithPairModel
+from code.models import makeDataSet_Prt
 from code.utils  import projectData2D, makeParameters, parceParameter
 from code.protos import extractPrototypes
 
@@ -32,10 +33,10 @@ params = {
     
     # Deep Reinforcement Learning Parameters ---------------
     'max_prototypes':20,
-    'intrinsic':True, 
+    'ICM':True, 
     'lambda':0.1, 
     'eta':1.0, 
-    'gamma':0.2, 
+    'gamma':0.9, 
     'eps':0.15, 
     'beta':0.2,
     'batch_size':64, 
@@ -47,8 +48,16 @@ params = {
     'nhead':3,
     'nhid':128,
     'd_model':90,
-    'n_layers':3
+    'n_layers':3,
+    'target_refill':200,
     # ------------------------------------------------------
+
+    # Siames Net parameters --------------------------------
+    'siam_batch':128, 
+    'siam_lr':0.0001, 
+    'siam_epochs': 50,
+    'siam_hsize':64,
+    'siam_dpr':0.1
 }
 
 def check_params(arg=None):
@@ -56,6 +65,8 @@ def check_params(arg=None):
     global EVAL_DATA_NAME
     global TRAIN_DATA_NAME
     global TRAIN_ENCODER
+    global TRAIN_CMP
+    global TRAIN_CENTERS
 
     global params
 
@@ -81,7 +92,11 @@ def check_params(arg=None):
     parse.add_argument('--parameters', dest='params', help='file containing the parameters', 
                        required=False, default='')		
 
-    parse.add_argument('--no_train_enc', help='Do not train the encoder', 
+    parse.add_argument('--no_train_enc', help='Do not train the encoder model', 
+					   required=False, action='store_false', default=True)
+    parse.add_argument('--no_train_pro', help='Do not train the prototype model', 
+					   required=False, action='store_false', default=True)
+    parse.add_argument('--no_train_sia', help='Do not train the siames model', 
 					   required=False, action='store_false', default=True)
     
     parse.add_argument('--make_parameter', help='Make a file with all parameters. Use this as reference.', 
@@ -94,6 +109,8 @@ def check_params(arg=None):
     
     ONLINE_NAME      = returns.trsn
     TRAIN_ENCODER    = bool(returns.no_train_enc)
+    TRAIN_CMP        = bool(returns.no_train_sia)
+    TRAIN_CENTERS    = bool(returns.no_train_pro)
 
     if bool(returns.make_parameter):
         makeParameters(params, os.path.join('parameters.txt'))
@@ -122,6 +139,12 @@ def check_params(arg=None):
     if not TRAIN_ENCODER and not os.path.isfile(os.path.join('pts', 'encoder.pt')):
         print('# Disabled the parameter \'--no_train_enc\'\n because there is not any checkpoint of the encoder under the name \'encoder.pt\' in folder \'pts\'')
         TRAIN_ENCODER = True
+    if not TRAIN_CENTERS and (not os.path.isfile(os.path.join('data', 'pos_center.npy')) or not os.path.isfile(os.path.join('data', 'neg_center.npy'))):
+        print('# Disabled the parameter \'--no_train_pro\'\n because there is not file in data: pos_center.npy or neg_center.npy')
+        TRAIN_CENTERS = True
+    if not TRAIN_CMP and not os.path.isfile(os.path.join('pts', 'siam.pt')):
+        print('# Disabled the parameter \'--no_train_enc\'\n because there is not any checkpoint of the encoder under the name \'siam.pt\' in folder \'pts\'')
+        TRAIN_CMP = True
     
     return 1
 
@@ -167,18 +190,45 @@ def train_encoder():
     del data 
     del model
 
-if __name__ == '__main__':
-    if check_params(arg=sys.argv[1:]) == 0:
-        exit(0)
-    if TRAIN_ENCODER:
-        train_encoder()
-    
+def trainSiam():
+    print ('# Start: Trianing Siamese Model')
     # temporal code, delete later ---------
     TRAIN_DATA_NAME = 'data/train_en.csv'
     EVAL_DATA_NAME  = 'data/dev_en.csv'
     TEST_DATA_NAME  = 'data/test_en.csv'
     # temporal code, delete later ---------
 
-    params.update({'data_path':TRAIN_DATA_NAME, 'eval_data_path':EVAL_DATA_NAME})
-    extractPrototypes(method='dql', params=params)
-    # projectData2D(os.path.join(DATA_FOLDER, 'train_en.csv'), use_centers=True, drops=['id', 'is_humor'])
+    # Siam data
+    _, t_loader = makeDataSet_Prt(TRAIN_DATA_NAME, batch=params['siam_batch'], id_h='id', text_h='vecs', class_h='is_humor', criterion='random')
+    _, e_loader = makeDataSet_Prt(EVAL_DATA_NAME, batch=params['siam_batch'], id_h='id', text_h='vecs', class_h='is_humor', criterion='random')
+
+    model = makeModels('siam', int(params['siam_hsize']), 90, dropout=float(params['siam_dpr']))
+    trainModels(model, t_loader, epochs=int(params['siam_epochs']), evalData_loader=e_loader,  
+                nameu='siam', lr=float(params['siam_lr']), use_acc=False, b_fun=min)
+    
+    del t_loader
+    del e_loader
+
+    model.load(os.path.join('pts', 'siam.pt'))
+    predictWithPairModel(TEST_DATA_NAME, model=model, out_name='pred_siam.csv')
+    del model
+
+if __name__ == '__main__':
+    if check_params(arg=sys.argv[1:]) == 0:
+        exit(0)
+
+    if TRAIN_ENCODER:
+        train_encoder()
+    # temporal code, delete later ---------
+    TRAIN_DATA_NAME = 'data/train_en.csv'
+    EVAL_DATA_NAME  = 'data/dev_en.csv'
+    TEST_DATA_NAME  = 'data/test_en.csv'
+    # temporal code, delete later ---------
+    if TRAIN_CENTERS:
+        params.update({'data_path':TRAIN_DATA_NAME, 'eval_data_path':EVAL_DATA_NAME})
+        extractPrototypes(method='dql', params=params)
+        # projectData2D(os.path.join(DATA_FOLDER, 'train_en.csv'), use_centers=True, drops=['id', 'is_humor'])
+        predictWithPairModel(TEST_DATA_NAME)
+    
+    if TRAIN_CMP:
+        trainSiam()

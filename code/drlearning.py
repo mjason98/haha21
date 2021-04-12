@@ -102,7 +102,7 @@ class Agent_DQL(torch.nn.Module):
         return y
     
     def load(self, path):
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path, map_location=self.device))
 
     def save(self, path):
         torch.save(self.state_dict(), path) 
@@ -190,7 +190,7 @@ class ICM(torch.nn.Module):
         return forward_pred_err, inverse_pred_err
     
     def load(self, path):
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path, map_location=self.device))
 
     def save(self, path):
         torch.save(self.state_dict(), path) 

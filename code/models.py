@@ -66,7 +66,7 @@ class ADDN(torch.nn.Module):
     def __init__(self):
         super(ADDN, self).__init__()
     def forward(self, X):
-        return F.normalize(X.sum(dim=1), dim=-1)
+        return F.normalize(X.sum(dim=1), dim=1)
 
 # The encoder last layers
 class Encod_Last_Layers(nn.Module):
@@ -146,14 +146,83 @@ class Encoder_Model(nn.Module):
         elif algorithm == 'rms':
             return torch.optim.RMSprop(pars, lr=lr, weight_decay=decay)
 
+# Euclid Distance Model
+class DistanceModel:
+    def __init__(self, d=F.pairwise_distance):
+        self.distance = d 
+    def __call__(self, X):
+        ''' X:(bach, 2*vec_size) '''
+        vec_size = X.shape[1]//2
+        x1 = X[:, :vec_size]
+        x2 = X[:, vec_size:]
+        return self.distance(x1,x2, keepdim=False)
+    def eval(self):
+        return None
+
+class ContrastiveLoss(torch.nn.Module):
+    """
+    Contrastive loss function.
+    Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    """
+    def __init__(self, margin=2.0):
+        super(ContrastiveLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, D, label):
+        loss_contrastive = torch.mean((1-label) * torch.pow(D, 2) +
+                                      (label) * torch.pow(torch.clamp(self.margin - D, min=0.0), 2))
+        return loss_contrastive
+
+class CLWraper:
+    def __init__(self, margin=1.0):
+        self.criterion = ContrastiveLoss(margin)
+    def __call__(self, D, L):
+        d, l = D.view(-1), L.view(-1)
+        return self.criterion(d,l)
+
+class Siam_Model(nn.Module):
+    def __init__(self, in_size, hidden_size, dropout=0.1, margin=1.0):
+        super(Siam_Model, self).__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.Dense = nn.Sequential(nn.Linear(in_size, hidden_size), nn.ELU(), nn.Linear(hidden_size, hidden_size//2))
+        self.criterion1 = CLWraper(margin)
+        self.size = in_size
+        self.variance = 0.5
+        
+        self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        self.to(device=self.device)
+    def forward(self, X):
+        ''' X(batch, n_pairs, 2*vec_size) '''
+        batch_s = X.shape[0]
+        x = X.view(-1, self.size*2).to(device=self.device)
+        x = self.dropout(x)
+        x1, x2 = x[:, :self.size], x[:, self.size:]
+        x1, x2 = self.Dense(x1), self.Dense(x2)
+
+        # Gaussian Noice
+        # x1 += torch.randn(x1.shape) * self.variance
+        # x2 += torch.randn(x2.shape) * self.variance
+
+        # distance function
+        euclidean_distance = F.pairwise_distance(x1, x2).view(batch_s, -1)
+        return euclidean_distance #, 0
+    def load(self, path):
+        self.load_state_dict(torch.load(path, map_location=self.device))
+
+    def save(self, path):
+        torch.save(self.state_dict(), path) 
+
+
 # The model's maker
 def makeModels(name:str, hidden_size, _tr_vec_size=768, dropout=0.0, max_length=120, selection='first'):
     if name == 'encoder':
         return Encoder_Model(hidden_size, _tr_vec_size, dropout=dropout, max_length=max_length, selection=selection)
+    elif name == 'euclid-distance':
+        return DistanceModel(d=F.pairwise_distance)
+    elif name == 'siam':
+        return Siam_Model(_tr_vec_size, hidden_size, dropout=dropout)
     else:
-        print('# The models name', headerizar(name), 'is invalid, instead use one of this: [encoder]')
-        exit(-1)
-        return None
+        raise ValueError('# The models name {} is invalid, instead use one of this: [encoder, siam, euclid-distance]'.format(headerizar(name)))
 
 def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, etha=1., nameu='encoder', optim=None, b_fun=None, smood=False, mtl=False, use_acc=True):
     if epochs <= 0:
@@ -192,7 +261,8 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
 
             with torch.no_grad():
                 total_loss += loss.item() * y1.shape[0]
-                total_acc += (y1 == y_hat.argmax(dim=-1)).sum().item()
+                if use_acc: 
+                    total_acc += (y1 == y_hat.argmax(dim=-1)).sum().item()
                 dl += y1.shape[0]
             bar.next(total_loss/dl)
         if use_acc:
@@ -218,7 +288,8 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                         loss = model.criterion1(y_hat, y1)
                     
                     total_loss += loss.item() * y1.shape[0]
-                    total_acc += (y1 == y_hat.argmax(dim=-1)).sum().item()
+                    if use_acc:
+                        total_acc += (y1 == y_hat.argmax(dim=-1)).sum().item()
                     dl += y1.shape[0]
                     bar.next()
             if use_acc:
@@ -230,7 +301,7 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
         
         if res:
             model.save(os.path.join('pts', nameu+'.pt'))
-    board.show(os.path.join('pts', nameu+'.png'), plot_smood=smood)
+    board.show(os.path.join('out', nameu+'.png'), plot_smood=smood)
 
 def evaluateModels(model, testData_loader, header=('id', 'is_humor', 'humor_rating'), cleaner=[], name='pred'):
     model.eval()
@@ -346,7 +417,7 @@ class VecDataset(Dataset):
         
         ids  = self.data_frame.loc[idx, self.id_name]
         sent  = self.data_frame.loc[idx, self.x_name]
-        sent = torch.Tensor([float(s) for s in sent]).float()
+        sent = torch.Tensor([float(s) for s in sent.split()]).float()
         
         try:
             y1 = self.data_frame.loc[idx, self.y1_name]
@@ -354,6 +425,70 @@ class VecDataset(Dataset):
         except:
             y1 = 0
             # value, regv = 0, 0.
+
+        # sample = {'x': sent, 'y': value, 'v':regv, 'id':ids}
+        sample = {'x': sent, 'y': y1, 'id':ids}
+        return sample
+
+class ProtoDataset(Dataset):
+    def __init__(self, csv_file, pos_p, neg_p, id_h='id', text_h='vecs', class_h='is_humor', criterion='all', id_criterion=None):
+        self.data_frame = pd.read_csv(csv_file)
+        self.pos_p = pos_p 
+        self.neg_p = neg_p
+        self.__M_pos, self.__M_neg = min(2, pos_p.shape[0]),min(3, neg_p.shape[0])
+
+        if criterion not in ['random', 'all', 'id']:
+            raise ValueError("Criterion parameter: {} not in [\'{}\']".format(criterion, '\',\''.join(['random', 'all', 'id'])))
+        
+        self.criterion = criterion
+        self.x_name  = text_h
+        self.id_name = id_h
+        self.y1_name = class_h
+    
+    def getProtoPairSize(self):
+        ''' return: len(prototype positive), len(prototype negative), shape of prototypes '''
+        return self.pos_p.shape[0], self.neg_p.shape[0], self.pos_p.shape[1]
+    
+    def __appendProtos(self, sentT, label):
+        ''' pos prototipes in \'all\' criterion come first '''
+        with torch.no_grad():
+            sentT.unsqueeze_(0)
+            label = int(label)
+            
+            if self.criterion == 'all':
+                all_   = torch.cat([torch.from_numpy(self.pos_p), torch.from_numpy(self.neg_p)], dim=0)
+                all_l_ = torch.cat([torch.ones(self.pos_p.shape[0]), torch.zeros(self.neg_p.shape[0])], dim=0)
+            elif self.criterion == 'random':
+                pos_choice = np.random.randint(0,self.pos_p.shape[0],size=(self.__M_pos)).tolist()
+                neg_choice = np.random.randint(0,self.neg_p.shape[0],size=(self.__M_neg)).tolist()
+
+                all_ = torch.cat([torch.from_numpy(self.pos_p[pos_choice]), torch.from_numpy(self.neg_p[neg_choice])], dim=0)
+                all_l_ = torch.cat([torch.ones(self.__M_pos), torch.zeros(self.__M_neg)], dim=0)
+            
+            all_l_ = (all_l_ != label).int()
+            tmp  = torch.zeros((all_.shape[0], 1)) 
+            tmp  = tmp + sentT
+            all_ = torch.cat([tmp, all_], dim=1)
+            return all_, all_l_
+
+    def __len__(self):
+        return len(self.data_frame)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+        
+        ids  = self.data_frame.loc[idx, self.id_name]
+        sent  = self.data_frame.loc[idx, self.x_name]
+        sent = torch.Tensor([float(s) for s in sent.split()]).float()
+        
+        try:
+            y1 = self.data_frame.loc[idx, self.y1_name]
+            # regv  = self.data_frame.loc[idx, 'humor_rating'] if int(value) != 0 else 0.
+        except:
+            y1 = 0
+            # value, regv = 0, 0.
+        sent, y1 = self.__appendProtos(sent, y1)
 
         # sample = {'x': sent, 'y': value, 'v':regv, 'id':ids}
         sample = {'x': sent, 'y': y1, 'id':ids}
@@ -370,50 +505,55 @@ def makeDataSet_Vec(csv_path:str, batch, shuffle=True, id_h='id', text_h='text',
     loader =  DataLoader(data, batch_size=batch, shuffle=shuffle, num_workers=4, drop_last=False)
     return data, loader
 
+def makeDataSet_Prt(csv_path:str, batch, shuffle=True, id_h='id', text_h='text', class_h='is_humor', criterion='all'):
+    data   =  ProtoDataset(csv_path, np.load(os.path.join('data', 'pos_center.npy')), np.load(os.path.join('data', 'neg_center.npy')),id_h=id_h, text_h=text_h, class_h=class_h, criterion=criterion)
+    loader =  DataLoader(data, batch_size=batch, shuffle=shuffle, num_workers=4, drop_last=False)
+    return data, loader
+
 #================= TEMPORAL FUNCTIONS ===============================
 
 def makeTrain_and_ValData(data_path:str, percent=10, class_label=None, df='data'):
-	'''
-		class_lable: str The label to split, the humor column with values ['0', '1']
-	'''
-	train_path = os.path.join(df, 'train_data.csv')
-	eval_path  = os.path.join(df, 'eval_data.csv')
+    '''
+        class_lable: str The label to split, the humor column with values ['0', '1']
+    '''
+    train_path = os.path.join(df, 'train_data.csv')
+    eval_path  = os.path.join(df, 'eval_data.csv')
 
-	if os.path.isfile(train_path) and os.path.isfile(eval_path):
-		return train_path, eval_path	
+    if os.path.isfile(train_path) and os.path.isfile(eval_path):
+        return train_path, eval_path	
 
-	data = pd.read_csv(data_path)	
-	mean = [len(data.loc[i, 'text'].split()) for i in range(len(data))]
-	var  = [i*i for i in mean]
-	mean, var = sum(mean)/len(mean), sum(var)/len(mean)
-	var = (var - mean) ** 0.5
-	print ('# Mean:', mean, 'std:', var)
+    data = pd.read_csv(data_path)	
+    mean = [len(data.loc[i, 'text'].split()) for i in range(len(data))]
+    var  = [i*i for i in mean]
+    mean, var = sum(mean)/len(mean), sum(var)/len(mean)
+    var = (var - mean) ** 0.5
+    print ('# Mean:', mean, 'std:', var)
 
-	
-	train_data, eval_data = None, None
-	if class_label is None:
-		percent = (len(data) * percent) // 100
-		ides = [i for i in range(len(data))]
-		random.shuffle(ides)
+    
+    train_data, eval_data = None, None
+    if class_label is None:
+        percent = (len(data) * percent) // 100
+        ides = [i for i in range(len(data))]
+        random.shuffle(ides)
 
-		train_data = data.drop(ides[:percent])
-		eval_data  = data.drop(ides[percent:])
-	else:
-		pos  = list(data.query(class_label+' == 1').index)
-		neg  = list(data.query(class_label+' == 0').index)
-		random.shuffle(pos)
-		random.shuffle(neg)
+        train_data = data.drop(ides[:percent])
+        eval_data  = data.drop(ides[percent:])
+    else:
+        pos  = list(data.query(class_label+' == 1').index)
+        neg  = list(data.query(class_label+' == 0').index)
+        random.shuffle(pos)
+        random.shuffle(neg)
 
-		p1,p2 = (len(pos) * percent) // 100, (len(neg) * percent) // 100
-		indes_t, indes_e = pos[:p1] + neg[:p2], pos[p1:] + neg[p2:]
+        p1,p2 = (len(pos) * percent) // 100, (len(neg) * percent) // 100
+        indes_t, indes_e = pos[:p1] + neg[:p2], pos[p1:] + neg[p2:]
 
-		train_data = data.drop(indes_t)
-		eval_data  = data.drop(indes_e)
+        train_data = data.drop(indes_t)
+        eval_data  = data.drop(indes_e)
 
-	train_data.to_csv(train_path, index=None)
-	eval_data.to_csv(eval_path, index=None)
+    train_data.to_csv(train_path, index=None)
+    eval_data.to_csv(eval_path, index=None)
 
-	return train_path, eval_path
+    return train_path, eval_path
 
 def convert2EncoderVec(data_name:str, model, loader, save_pickle=False, save_as_numpy=False, df='data'):
     model.eval()
@@ -489,3 +629,47 @@ def convert2EncoderVec(data_name:str, model, loader, save_pickle=False, save_as_
     else:
         data.to_csv(new_name, index=None, header=n_head)
     return new_name
+
+def predictWithPairModel(data_csv, model=None, batch=16, id_vec='vecs', id_h='is_humor', id_id='id', out_name='pred_manual.csv', drops=['vecs']):
+    ''' predict unlabeled data\n
+        model most asept a tensor of (batch, 2*vec_size ) and output the pairwise distance in a 
+        output of (batch, 1)\n\n
+        This uses Nearest Neibor method: the label's closest prototype will be one chosen.
+    '''
+    if model is None:
+        model = DistanceModel(d=F.pairwise_distance)
+
+    out_name = os.path.join('out', out_name)
+    data, loader = makeDataSet_Prt(data_csv, batch=batch, shuffle=False, id_h=id_id, text_h=id_vec, class_h=id_h, criterion='all')
+    model.eval()
+
+    pos_size, _, _ = data.getProtoPairSize()
+    new_label, bar = [], MyBar('eval', max=len(loader))
+    
+    cpu0 = torch.device("cpu")
+    with torch.no_grad():
+        for d in loader:
+            x = d['x'].to(device=cpu0)
+            x = x.view(-1,x.shape[-1])
+            y_hat = model(x).to(device=cpu0)
+
+            y_hat = y_hat.view(batch, -1)
+            y_hat = y_hat.argmin(dim=1)
+            y_hat = (y_hat < pos_size).squeeze().int()
+            new_label.append(y_hat.numpy())    
+            bar.next()
+        bar.finish()
+    new_label = np.concatenate(new_label, axis=0)
+    new_label_S = pd.Series(new_label)
+    del data 
+    del loader 
+    del new_label
+
+    data = pd.read_csv(data_csv).drop(drops, axis=1)
+    data_H = list(data.columns) + [id_h]
+
+    data = pd.concat([data, new_label_S], axis=1)
+    data.to_csv(out_name, index=None, header=data_H)
+    print ('# New predicted data saved in', colorizar(out_name))
+    del data 
+    del data_H

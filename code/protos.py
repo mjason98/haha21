@@ -10,7 +10,7 @@ import copy
 
 from .utils import strToListF
 from .models import makeDataSet_Vec
-from .utils import strToListF, colorizar
+from .utils import strToListF, colorizar, getSTime
 
 # models
 from .drlearning import Agent_DQL, ExperienceReplay, ICM as ICM_DQL
@@ -60,17 +60,18 @@ class VecDataEnvironment:
         return cad, lab    
     
     def export_prototypes(self, file_list, label_list):
-        ''' export to a txt the vectors in the backpak\n
+        ''' export to a .npy the vectors in the backpak\n
             filelist: [f1:Str, f2:str, ... , fn:str] \n 
             label_list: [l1:int, l2:int, ..., ln:int] \n 
-            the vectors with li label will be placed in fi file '''
+            the vectors with li label will be placed in fi file for all i'''
         for file_, label_ in zip(file_list, label_list):
             print ('# Exporting prototypes to', colorizar(os.path.basename(file_)))
-            with open(file_, 'w') as file:
-                for v,l in zip(self.backpack, self.backpack_l):
-                    if l != label_: continue
-                    chad = ' '.join([str(v) for v in v.tolist()]) + '\n'
-                    file.write(chad)
+            expo = []
+            for v,l in zip(self.backpack, self.backpack_l):
+                if l != label_: continue
+                expo.append(v.reshape(1,-1))
+            expo = np.concatenate(expo, axis=0)
+            np.save(file_+'.npy', expo)
     
     def proto_cmp_data_csv(self, ini_fin):
         ''' function used with paralellism to calculate the labels of the data with the prototypes.\n
@@ -286,13 +287,12 @@ def __minibatch_train_dql(Qmodel, Qtarget, qloss, replay, params, DEVICE, icm=No
     state2_batch = state2_batch.to(device=DEVICE)
 
     forward_pred_err , inverse_pred_err = 0., 0.
+    reward = reward_batch
+
     if icm is not None:
         forward_pred_err , inverse_pred_err = icm(state1_batch, action_batch, state2_batch)
-    
-    i_reward = (1. / float(params['eta'])) * forward_pred_err
-    reward = i_reward.detach()
-    if bool(params['intrinsic']):
-        reward += reward_batch
+        i_reward = (1. / float(params['eta'])) * forward_pred_err
+        reward += i_reward.detach()
     
     # qvals = Qmodel(state2_batch) # recordar usar target net later
     qvals = Qtarget(state2_batch)
@@ -316,11 +316,12 @@ def __loss_fn(q_loss, inverse_loss, forward_loss, params):
 
 # params (data_path, lcolumn, vcolumn, param)
 def __prototypes_with_dql(params):
-    print ('# Start:','Deep Q Learning algorithm, relax, this will take a wille.')
+    print ('# Start:','Deep Q Learning algorithm. Relax, this will take a wille.')
     BACKPACK_SIZE, EPS  = int(params['max_prototypes']),  float(params['eps'])
     EPOCHS, LR, BSIZE = int(params['epochs']), float(params['lr']), int(params['batch_size'])
-    DMODEL = params['d_model']
-    target_refill, i_targetFill = 100, 0
+    DMODEL = int(params['d_model'])
+    target_refill, i_targetFill = int(params['target_refill']), 0
+    use_icm = params['ICM']
 
     losses = []
     switch_to_eps_greedy = int(EPOCHS * (2/5))
@@ -329,21 +330,24 @@ def __prototypes_with_dql(params):
     DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
     # max_len : 5000, antes BACKPACK_SIZE+11, de esta forma quisas se adapte a ir cresiendo poco a poco
-    Qmodel = Agent_DQL(BACKPACK_SIZE+1, nhead=params['nhead'],nhid=params['nhid'],d_model=DMODEL,nlayers=params['n_layers'], max_len=5000,dropout=params['dropout'])
+    Qmodel = Agent_DQL(BACKPACK_SIZE+1, nhead=int(params['nhead']),nhid=int(params['nhid']),d_model=DMODEL,nlayers=int(params['n_layers']), max_len=5000,dropout=float(params['dropout']))
     qloss = torch.nn.MSELoss().to(device=DEVICE)
     
     # seting up the taget net, and memory replay stuff
     Qtarget = copy.deepcopy(Qmodel).to(device=DEVICE)
     Qtarget.load_state_dict(Qmodel.state_dict())
     replay = ExperienceReplay(N=int(params['memory_size']), batch_size=BSIZE)
-
-    icm = ICM_DQL(BACKPACK_SIZE+1, DMODEL*(BACKPACK_SIZE+1), DMODEL, max_len=5000, forward_scale=1., inverse_scale=1e4, nhead=params['nhead'],hiden_size=params['nhid'],nlayers=params['n_layers'], dropout=params['dropout'])
-    all_model_params = list(Qmodel.parameters()) + list(icm.parameters())
-    opt = torch.optim.Adam(lr=LR, params=all_model_params)
+    all_model_params = list(Qmodel.parameters())
     
+    icm = None
+    if use_icm:
+        icm = ICM_DQL(BACKPACK_SIZE+1, DMODEL*(BACKPACK_SIZE+1), DMODEL, max_len=5000, forward_scale=1., inverse_scale=1e4, nhead=int(params['nhead']),hiden_size=int(params['nhid']),nlayers=int(params['n_layers']), dropout=float(params['dropout']))
+        all_model_params += list(icm.parameters())
+        icm.train()
+    
+    opt = torch.optim.Adam(lr=LR, params=all_model_params)
     Qmodel.train()
-    icm.train()
-
+    
     greater_reward = -(2**30)
     for i in range(EPOCHS):
         print('# Epoch', i+1, 'with eps' if i >= switch_to_eps_greedy else 'with softmax policy')
@@ -353,10 +357,11 @@ def __prototypes_with_dql(params):
         acc_reward = 0.
         it_episode = 0
         init_time = time.time()
+
         while not all_obj_seeit:
             # parafernalia ----------------------------
             it_episode += 1
-            print ('\r  It {} with reward {:.4f} dt:{:.1f}'.format(it_episode, acc_reward, time.time()-init_time), end=' ')
+            print ('\r  It {} with reward {:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)), end=' ')
             # -----------------------------------------
             
             opt.zero_grad()
@@ -393,7 +398,7 @@ def __prototypes_with_dql(params):
                 i_targetFill = 0
                 Qtarget.load_state_dict(Qmodel.state_dict())
         
-        print ('\r  It {} with reward {:.4f}'.format(it_episode, acc_reward), end='\n')
+        print ('\r  It {} with final reward:{:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)), end='\n')
         if greater_reward < acc_reward:
             greater_reward = acc_reward
             Qmodel.save(os.path.join('pts', 'dql_model.pt'))
@@ -402,13 +407,6 @@ def __prototypes_with_dql(params):
     losses_ = np.array(losses)
     np.save(os.path.join('out', 'dql_losses.npy'), losses_)
     del icm 
-    # plt.figure(figsize=(8,6))
-    # plt.plot(np.log(losses_[:,0]),label='Q loss')
-    # plt.plot(np.log(losses_[:,1]),label='Forward loss')
-    # plt.plot(np.log(losses_[:,2]),label='Inverse loss')
-    # plt.legend()
-    # plt.show()
-
     del opt
     del replay
 
@@ -434,13 +432,13 @@ def __prototypes_with_dql(params):
             
             all_obj_seeit = done
             if done:
-                print ('\r  It {} with reward {:.4f} dt:{:.1f}'.format(it_episode, acc_reward, time.time()-init_time))
+                print ('\r  It {} with reward {:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)))
                 break
-            print ('\r  It {} with reward {:.4f} dt:{:.1f}'.format(it_episode, acc_reward, time.time()-init_time), end=' ')
+            print ('\r  It {} with reward {:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)), end=' ')
 
     # esporting final state of the backpack
-    env.export_prototypes(file_list  = [os.path.join('data','pos_center.txt'), os.path.join('data','neg_center.txt')], 
-                          label_list = [1                                    , 0])
+    env.export_prototypes(file_list  = [os.path.join('data','pos_center'), os.path.join('data','neg_center')], 
+                          label_list = [1                                , 0])
     del env
 
 def extractPrototypes(method, params):
