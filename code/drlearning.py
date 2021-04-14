@@ -10,17 +10,18 @@ class ExperienceReplay:
         self.batch_size = batch_size
         self.memory = []
         self.counter = 0
-    
+
+        self.device_cpu = torch.device("cpu")
     def add_memory(self, state1, action, reward, state2):
         self.counter += 1
         if self.counter % self.N == 0:
             self.shuffle_memory()
         
         if len(self.memory) < self.N:
-            self.memory.append((state1.detach(), action, reward, state2.detach()))
+            self.memory.append((state1.detach().to(device=self.device_cpu), action, reward, state2.detach().to(device=self.device_cpu)))
         else:
             rand_index = np.random.randint(0,self.N-1)
-            self.memory[rand_index] = (state1.detach(), action, reward, state2.detach())
+            self.memory[rand_index] = (state1.detach().to(device=self.device_cpu), action, reward, state2.detach().to(device=self.device_cpu))
     
     def shuffle_memory(self):
         shuffle(self.memory)
