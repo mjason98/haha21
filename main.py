@@ -50,6 +50,7 @@ params = {
     'd_model':90,
     'n_layers':3,
     'target_refill':200,
+    'reduced_data_prototypes':True,
     # ------------------------------------------------------
 
     # Siames Net parameters --------------------------------

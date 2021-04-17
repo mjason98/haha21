@@ -18,13 +18,9 @@ from .drlearning import Agent_DQL, ExperienceReplay, ICM as ICM_DQL
 class VecDataEnvironment:
     ''' If this environment return done=True, reset it or some errors may apears'''
     VERY_BAD_REWARD = -1.
-    def __init__(self, data_path, eval_path=None, max_backpack_size=200, vname='vecs', lname='is_humor', frmethod='acc', eval_data_path=None):
+    def __init__(self, data_path, eval_path=None, max_backpack_size=200, vname='vecs', lname='is_humor', frmethod='acc', rdata_weval=False):
         self.data = pd.read_csv(data_path)
         self.data_eval = None
-        if eval_path is not None:
-            self.data_eval  = pd.read_csv(eval_path)
-            # self.min_dist   = np.zeros(len(self.data_eval), dtype=np.float32)
-            # self.assg_label = [None for _ in range(len(self.data_eval))]
 
         self.max_backpack_size = max_backpack_size
         self.vec_size = len(self.data.loc[0,vname].split())
@@ -36,16 +32,81 @@ class VecDataEnvironment:
         self.backpack_l = []
 
         self.pos_gone = None
-        self.iterator = None
+        self.iterator = [i for i in range(len(self.data))]
         self.iter_pos = None
+
         self.current_vector = None
         self.final_reward = None
         self.frmethod = frmethod
+
+        if eval_path is not None:
+            self.data_eval  = pd.read_csv(eval_path)
+            # self.min_dist   = np.zeros(len(self.data_eval), dtype=np.float32)
+            # self.assg_label = [None for _ in range(len(self.data_eval))]
+            if rdata_weval:
+                self.resetIterator(True)
+                
+    def resetIterator(self, use_reduced=False):
+        if not use_reduced:
+            self.iterator = [i for i in range(len(self.data))]
+        else:
+            print ('# Reducing Data trick')
+            file_path = os.path.join('data', 'itEnvRed.npy')
+            if os.path.isfile(file_path):
+                rel = np.load(file_path)
+                self.iterator = rel.tolist()
+                print ('  Taked from', colorizar(file_path))
+                del rel 
+            else:
+                cnt = mp.cpu_count()
+                pool = mp.Pool(cnt)
+
+                dx = int(len(self.data_eval) / cnt ) 
+                dx = [(i*dx, i*dx + dx + (0 if i != cnt-1 else len(self.data_eval) % cnt)) for i in range(cnt)]
+                label_list = pool.map(self.reduceData, dx)
+                del pool 
+                del cnt 
+                del dx 
+
+                ides = {}
+                for li in label_list: 
+                    for v in li:
+                        ides.update({v:1})
+                del label_list
+
+                self.iterator = [ v for v in ides ]
+                
+                save = np.array(self.iterator, dtype=np.int64)
+                np.save(file_path, save)
+                
+                del save
+                del ides 
+    
+    def reduceData(self, ini_fin):
+        sol = []
+        for k in range(ini_fin[0],ini_fin[1]):
+            vec = np.array(strToListF(self.data_eval.loc[k, self.vname]), dtype=np.float32)
+            lab = int(self.data_eval.loc[k, self.lname])
+            ide, dist = None, None 
+            for i in range(len(self.data)):
+                curr_vec = np.array(strToListF(self.data.loc[i, self.vname]), dtype=np.float32)
+                curr_lab = int(self.data.loc[i, self.lname])
+                if lab != curr_lab: continue
+
+                distance = np.sqrt(((curr_vec - vec) ** 2).sum()).item()
+                if dist is None or dist > distance:
+                    dist = distance
+                    ide = i 
+            sol.append(ide)
+        del self.data_eval
+        del self.data
+
+        return sol
     
     def __next(self):
-        if self.iterator is None:
-            self.iterator = [i for i in range(len(self.data))]
+        if self.iter_pos is None:
             self.iter_pos = 0
+            random.shuffle(self.iterator) # RANDOMIZE 
         
         if self.iter_pos >= len(self.iterator):
             self.done = True
@@ -95,6 +156,10 @@ class VecDataEnvironment:
             if l_min is None:
                 break
             sol.append(l_min)
+        
+        del self.data
+        if self.data_eval is not None:
+            del self.data_eval
         return np.array(sol, np.int32) # check this later, the int32 ------------------------------------------ OJO -----------------
     
     # def proto_eval_minD(self, ini_fin):
@@ -238,7 +303,7 @@ class VecDataEnvironment:
         They are: (backpack state, incoming vector from data). '''
         self.done = False 
         self.final_reward = None
-        self.iterator = None
+        self.iter_pos = None
         self.__reset_backpack()
         s,v = self.__makeState()
         return s,v
@@ -326,7 +391,7 @@ def __prototypes_with_dql(params):
     losses = []
     switch_to_eps_greedy = int(EPOCHS * (2/5))
     
-    env = VecDataEnvironment(params['data_path'], eval_path=params['eval_data_path'], max_backpack_size=BACKPACK_SIZE, vname=params['vcolumn'], lname=params['lcolumn'])
+    env = VecDataEnvironment(params['data_path'], eval_path=params['eval_data_path'], max_backpack_size=BACKPACK_SIZE, vname=params['vcolumn'], lname=params['lcolumn'], rdata_weval=bool(params['reduced_data_prototypes']))
     DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
     # max_len : 5000, antes BACKPACK_SIZE+11, de esta forma quisas se adapte a ir cresiendo poco a poco
@@ -398,7 +463,7 @@ def __prototypes_with_dql(params):
                 i_targetFill = 0
                 Qtarget.load_state_dict(Qmodel.state_dict())
         
-        print ('\r  It {} with final reward:{:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)), end='\n')
+        print ('\r  It {} with reward:{:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)), end='\n')
         if greater_reward < acc_reward:
             greater_reward = acc_reward
             Qmodel.save(os.path.join('pts', 'dql_model.pt'))
@@ -415,6 +480,8 @@ def __prototypes_with_dql(params):
     Qmodel.eval()
     it_episode, acc_reward = 0, 0.
     init_time = time.time()
+
+    env.resetIterator()
 
     print ('# Ending:','Deep Q Learning algorithm')
     state1 = prepareBackpackState(*env.reset()).unsqueeze(0)
