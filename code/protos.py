@@ -33,6 +33,7 @@ class VecDataEnvironment:
 
         self.pos_gone = None
         self.iterator = [i for i in range(len(self.data))]
+        self.iter_modulo = len(self.data)
         self.iter_pos = None
 
         self.current_vector = None
@@ -41,22 +42,35 @@ class VecDataEnvironment:
 
         if eval_path is not None:
             self.data_eval  = pd.read_csv(eval_path)
-            # self.min_dist   = np.zeros(len(self.data_eval), dtype=np.float32)
-            # self.assg_label = [None for _ in range(len(self.data_eval))]
             if rdata_weval:
                 self.resetIterator(True)
-                
-    def resetIterator(self, use_reduced=False):
+    
+    def mulIterModulo(self, mul=1.0):
+        tmp = int(self.iter_modulo * mul)
+        self.iter_modulo = min(len(self.data), tmp)
+        self.iter_pos = None
+
+    def resetIterator(self, use_reduced=False, porsion=1.):
         if not use_reduced:
             self.iterator = [i for i in range(len(self.data))]
+            self.iter_modulo = int(len(self.data) * porsion)
+            self.iter_pos = 0
         else:
             print ('# Reducing Data trick')
             file_path = os.path.join('data', 'itEnvRed.npy')
             if os.path.isfile(file_path):
                 rel = np.load(file_path)
                 self.iterator = rel.tolist()
-                print ('  Taked from', colorizar(file_path))
+                self.iter_modulo = len(self.iterator)
+
                 del rel 
+                ides = dict([(i,1) for i in self.iterator])
+                for i in range(len(self.data)):
+                    if i not in ides:
+                        self.iterator.append(i)
+                del ides 
+                print ('  Taked from', colorizar(file_path))
+                
             else:
                 cnt = mp.cpu_count()
                 pool = mp.Pool(cnt)
@@ -75,11 +89,15 @@ class VecDataEnvironment:
                 del label_list
 
                 self.iterator = [ v for v in ides ]
-                
+                self.iter_modulo = len(self.iterator)
                 save = np.array(self.iterator, dtype=np.int64)
                 np.save(file_path, save)
-                
                 del save
+
+                for i in range(len(self.data)):
+                    if i not in ides:
+                        self.iterator.append(i)
+
                 del ides 
     
     def reduceData(self, ini_fin):
@@ -106,16 +124,19 @@ class VecDataEnvironment:
     def __next(self):
         if self.iter_pos is None:
             self.iter_pos = 0
-            random.shuffle(self.iterator) # RANDOMIZE 
+            selection_part = self.iterator[:self.iter_modulo]
+            other_part     = self.iterator[self.iter_modulo:]
+            random.shuffle(selection_part) # RANDOMIZE 
+            random.shuffle(other_part) 
+            self.iterator = selection_part + other_part
         
-        if self.iter_pos >= len(self.iterator):
+        self.iter_pos += 1
+        if (self.iter_pos >= len(self.iterator)) or ((self.iter_pos % self.iter_modulo == 0) and self.iter_pos > 0):    
             self.done = True
             self.__calculate_final_R()
             return None, None
-
+        
         i = self.iterator[self.iter_pos]
-        self.iter_pos += 1
-
         cad = strToListF(self.data.loc[i, self.vname])
         lab = int(self.data.loc[i, self.lname]) 
         return cad, lab    
@@ -161,51 +182,6 @@ class VecDataEnvironment:
         if self.data_eval is not None:
             del self.data_eval
         return np.array(sol, np.int32) # check this later, the int32 ------------------------------------------ OJO -----------------
-    
-    # def proto_eval_minD(self, ini_fin):
-    #     ''' This function uses paralelism to calculate the min distances '''
-    #     sol = 0.
-    #     current_v = np.array(self.current_vector[0], dtype=np.float32)
-    #     for i in range(ini_fin[0], ini_fin[1]):
-    #         vec = np.array(strToListF(self.data_eval.loc[i, self.vname]), dtype=np.float32)        
-    #         dist_in = np.sqrt(((vec - current_v) ** 2).sum())
-
-    #         if (self.min_dist[i] > dist_in) or (self.assg_label[i] is None):
-    #             self.min_dist[i] = dist_in
-    #             if (self.assg_label[i] is None) or (self.assg_label[i] != self.current_vector[1]):
-    #                 labu = int(self.data_eval.loc[i, self.lname])
-    #                 if    labu == self.current_vector[1] : sol += 1.
-    #                 else: sol += -1.
-    #             self.assg_label[i] = self.current_vector[1]
-    #     # es mejor poner estas variables like globales y no asi, compartidas
-    #     return sol, self.min_dist[ini_fin[0]:ini_fin[1]], self.assg_label[ini_fin[0]:ini_fin[1]]
-    
-    # def proto_gone_minD(self, ini_fin):
-    #     ''' This function uses paralelism to calculate the min distances '''
-    #     sol, eps = 0., 1e-9
-    #     if self.pos_gone is not None:
-    #         current_v = self.backpack[ self.pos_gone ]
-    #         for i in range(ini_fin[0], ini_fin[1]):
-    #             vec = np.array(strToListF(self.data_eval.loc[i, self.vname]), dtype=np.float32)        
-    #             dist_out = np.sqrt(((vec - current_v) ** 2).sum()).item()
-
-    #             if (self.min_dist[i] - dist_out) < eps and (self.assg_label[i] is not None):
-    #                 self.min_dist[i] = None
-    #                 old_asl =  self.assg_label[i]
-    #                 labu = int(self.data_eval.loc[i, self.lname])
-    #                 for ide, (bv, bl) in enumerate(zip(self.backpack, self.backpack_l)):
-    #                     if ide == i: continue
-    #                     if bl is None: continue
-                        
-    #                     d2 = np.sqrt(((vec - bv) ** 2).sum()).item()
-    #                     if (self.min_dist[i] is None) or (d2 < self.min_dist[i]):
-    #                         self.min_dist[i] = d2
-    #                         self.assg_label[i] = bl
-    #                 if old_asl != self.assg_label[i]:
-    #                     if    labu == self.assg_label[i]: sol += 1.
-    #                     else: sol -= 1.
-
-    #     return sol, self.min_dist[ini_fin[0]:ini_fin[1]], self.assg_label[ini_fin[0]:ini_fin[1]]
 
     def __calculate_final_R(self):
         ''' Inside this, self.iterator is seted to None, be aware of future errors '''
@@ -246,9 +222,6 @@ class VecDataEnvironment:
             for k in range(self.max_backpack_size):
                 self.backpack[k] = np.array([0 for _ in range(self.vec_size)], dtype=np.float32)
                 self.backpack_l[k] = None
-        # if self.data_eval is not None:
-        #     self.min_dist -= self.min_dist
-        #     for i in range(len(self.assg_label)): self.assg_label[i] = None
 
     def __makeState(self):
         self.current_vector = self.__next()
@@ -259,51 +232,16 @@ class VecDataEnvironment:
             vecI  = np.array(self.current_vector[0], dtype=np.float32)
         return (backP, vecI)
     
-    def __calculate_in_reward(self):
-        # por ahora 
-        return 0.
-        # if self.data_eval is None:
-        #     return 0
-        # cnt = mp.cpu_count()
-        # pool = mp.Pool(cnt)        
-        
-        # dx = int(len(self.data_eval) / cnt ) 
-        # dx = [(i*dx, i*dx + dx + (0 if i != cnt-1 else len(self.data_eval) % cnt)) for i in range(cnt)]
-        # in_reward, out_reward = 0., 0.
-
-        # mdist_list = pool.map(self.proto_eval_minD, dx)
-        
-        # # esto se puede mejorar con memoria compartida, pero ahora me pesa
-        # new_di, new_ass = [], []
-        # for v,d,l in mdist_list: 
-        #     in_reward += v
-        #     new_di.append(d)
-        #     new_ass += l 
-        
-        # self.min_dist = np.concatenate(new_di)
-        # self.assg_label[:] = new_ass
-        
-        # mdist_list = pool.map(self.proto_gone_minD, dx)
-        # new_di, new_ass = [], []
-        # for v,d,l in mdist_list: 
-        #     out_reward += v
-        #     new_di.append(d)
-        #     new_ass += l 
-        
-        # self.min_dist = np.concatenate(new_di)
-        # self.assg_label[:] = new_ass
-
-        # del mdist_list
-        # del pool         
-        # return in_reward + out_reward
-
     def reset(self):
         ''' Return the pair: a np.array of shape (max_backpack_size, vec_size) and a np.array of shape (vec_size). 
 
         They are: (backpack state, incoming vector from data). '''
         self.done = False 
         self.final_reward = None
-        self.iter_pos = None
+        
+        if (self.iter_pos is not None) and (self.iter_pos >= len(self.iterator)):
+            self.iter_pos = None
+        
         self.__reset_backpack()
         s,v = self.__makeState()
         return s,v
@@ -316,7 +254,7 @@ class VecDataEnvironment:
             raise ValueError('ERROR in action input variable, action: {} not in [0,{}]'.format(action,self.max_backpack_size))
         
         self.pos_gone = action if action < self.max_backpack_size else None 
-        reward = self.__calculate_in_reward()
+        reward = 0.
 
         if action < self.max_backpack_size:
             self.backpack[action] = np.array(self.current_vector[0], dtype=np.float32)
@@ -414,8 +352,18 @@ def __prototypes_with_dql(params):
     Qmodel.train()
     
     greater_reward = -(2**30)
+    triple_sch = [float(i) / 100. for i in params['distribution_train'].split('-')]
+    triple_sch = [ triple_sch[i] + (triple_sch[i-1] if i > 0 else 0)  for i in range(len(triple_sch))]
+    
+    if (triple_sch[-1] - 100.) > 1e-9:
+        raise ValueError("Parameter 'distribution_train' most add 100, but has {}.".format(suma_))
+
+    pos_tr = 0
     for i in range(EPOCHS):
         print('# Epoch', i+1, 'with eps' if i >= switch_to_eps_greedy else 'with softmax policy')
+        if int(EPOCHS * triple_sch[pos_tr]) == i:
+            env.mulIterModulo(2.0)
+            pos_tr += 1
 
         all_obj_seeit = False
         state1 = prepareBackpackState(*env.reset()).unsqueeze(0).to(device=DEVICE)
@@ -462,12 +410,12 @@ def __prototypes_with_dql(params):
             if i_targetFill % target_refill == 0:
                 i_targetFill = 0
                 Qtarget.load_state_dict(Qmodel.state_dict())
-        
-        print ('\r  It {} with reward:{:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)), end='\n')
-        if greater_reward < acc_reward:
+        if greater_reward <= acc_reward:
             greater_reward = acc_reward
             Qmodel.save(os.path.join('pts', 'dql_model.pt'))
-            icm.save(os.path.join('pts', 'icm_model.pt'))
+            if icm is not None:
+                icm.save(os.path.join('pts', 'icm_model.pt'))
+        print ('\r  It {} with reward:{:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)), end='\n')
 
     losses_ = np.array(losses)
     np.save(os.path.join('out', 'dql_losses.npy'), losses_)

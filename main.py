@@ -51,14 +51,15 @@ params = {
     'n_layers':3,
     'target_refill':200,
     'reduced_data_prototypes':True,
-    # ------------------------------------------------------
+    'distribution_train':'85-5-5-5', #the sum of this most be 100
+    # ---------------------------------------------------------
 
-    # Siames Net parameters --------------------------------
+    # Siames Net parameters -----------------------------------
     'siam_batch':128, 
     'siam_lr':0.0001, 
     'siam_epochs': 50,
     'siam_hsize':64,
-    'siam_dpr':0.1
+    'siam_dpr':0.05
 }
 
 def check_params(arg=None):
