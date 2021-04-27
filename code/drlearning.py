@@ -57,11 +57,12 @@ class PositionalEncoding(torch.nn.Module):
         self.pe[:, 1::2] = torch.cos(position * div_term)
         self.pe = self.pe.unsqueeze(0).transpose(0,1)
         # self.register_buffer('pe',pe)
-        # self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-        # self.pe.to(device=self.device)
-        # self.to(device=self.device)
+        self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        self.to(device=self.device)
+        self.pe.to(device=self.device)
     
     def forward(self, x):
+        x = x.to(device=self.device)
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
 
@@ -90,7 +91,6 @@ class Agent_DQL(torch.nn.Module):
 
         self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
         self.to(device=self.device)
-        self.pos_encoder.pe.to(device=self.device)
 
     def init_weights(self):
         initrange = 0.1
@@ -190,7 +190,6 @@ class ICM(torch.nn.Module):
 
         self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
         self.to(device=self.device)
-        self.encoder.pos_encoder.pe.to(device=self.device)
     
     def forward(self, state1, action, state2):
         state1_hat = self.encoder(state1).to(device=self.device)
