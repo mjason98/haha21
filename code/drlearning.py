@@ -63,7 +63,9 @@ class PositionalEncoding(torch.nn.Module):
     
     def forward(self, x):
         x = x.to(device=self.device)
-        x = x + self.pe[:x.size(0), :]
+        pe_ad = self.pe[:x.size(0), :].to(device=self.device)
+        
+        x = x + pe_ad
         return self.dropout(x)
 
 def policy(qvalues, eps=None):
