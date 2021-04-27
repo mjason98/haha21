@@ -387,7 +387,7 @@ class RawDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        ids  = int(self.data_frame.loc[idx, self.id_name].replace('tweet', ''))
+        ids  = int(str(self.data_frame.loc[idx, self.id_name]).replace('tweet', ''))
         sent = self.data_frame.loc[idx, self.x_name]
         
         try:
@@ -415,7 +415,7 @@ class VecDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        ids  = int(self.data_frame.loc[idx, self.id_name].replace('tweet', ''))
+        ids  = int(str(self.data_frame.loc[idx, self.id_name]).replace('tweet', ''))
         sent  = self.data_frame.loc[idx, self.x_name]
         sent = torch.Tensor([float(s) for s in sent.split()]).float()
         
@@ -478,7 +478,7 @@ class ProtoDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        ids  = int(self.data_frame.loc[idx, self.id_name].replace('tweet', ''))
+        ids  = int(str(self.data_frame.loc[idx, self.id_name]).replace('tweet', ''))
         sent  = self.data_frame.loc[idx, self.x_name]
         sent = torch.Tensor([float(s) for s in sent.split()]).float()
         
@@ -647,15 +647,18 @@ def predictWithPairModel(data_csv, model=None, batch=16, id_vec='vecs', id_h='is
     new_label, bar = [], MyBar('eval', max=len(loader))
     
     cpu0 = torch.device("cpu")
+    curr_ba = 0
     with torch.no_grad():
         for d in loader:
             x = d['x'].to(device=cpu0)
+            curr_ba = x.shape[0]
+
             x = x.view(-1,x.shape[-1])
             y_hat = model(x).to(device=cpu0)
 
-            y_hat = y_hat.view(batch, -1)
+            y_hat = y_hat.view(curr_ba, -1)
             y_hat = y_hat.argmin(dim=1)
-            y_hat = (y_hat < pos_size).squeeze().int()
+            y_hat = (y_hat < pos_size).flatten().int()
             new_label.append(y_hat.numpy())    
             bar.next()
         bar.finish()

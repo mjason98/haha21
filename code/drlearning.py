@@ -96,7 +96,8 @@ class Agent_DQL(torch.nn.Module):
         self.decoder.weight.data.uniform_(-initrange,initrange)
 
     def forward(self, x_):
-        x = x_ * math.sqrt(self.d_model)
+        x = x_.to(device=self.device)
+        x = x * math.sqrt(self.d_model)
         x = self.pos_encoder(x)
         x = self.transformer_encoder(x)
         
@@ -161,11 +162,12 @@ class Fnet(torch.nn.Module): # forward model
 
     def forward(self, state, action):
         action_ = torch.zeros(action.shape[0],self.actions) # converta actions to one hot
-        indices = torch.stack((torch.arange(action.shape[0]).to(device=self.device), action.squeeze().to(device=self.device)), dim=0)
+        indices = torch.stack((torch.arange(action.shape[0]), action.squeeze()), dim=0)
         indices = indices.tolist()
         action_[indices] = 1. 
 
-        x = torch.cat((state.to(device=self.device),action_.to(device=self.device)), dim=1)
+        # x = torch.cat((state.to(device=self.device),action_.to(device=self.device)), dim=1)
+        x = torch.cat((state,action_), dim=1)
         y = F.relu(self.linear1(x))
         y = F.relu(self.linear2(y))
         y = self.linear3(y)
@@ -188,8 +190,8 @@ class ICM(torch.nn.Module):
         self.to(device=self.device)
     
     def forward(self, state1, action, state2):
-        state1_hat = self.encoder(state1)
-        state2_hat = self.encoder(state2)
+        state1_hat = self.encoder(state1).to(device=self.device)
+        state2_hat = self.encoder(state2).to(device=self.device)
 
         state2_hat_pred = self.forward_model(state1_hat.detach(), action.detach())
         forward_pred_err = self.forward_scale * self.forward_loss(state2_hat_pred, state2_hat.detach()).sum(dim=1).unsqueeze(dim=1)

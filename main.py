@@ -137,17 +137,6 @@ def check_params(arg=None):
         os.mkdir('pts')
     
     setSeed(int(returns.my_seed))
-
-    if not TRAIN_ENCODER and not os.path.isfile(os.path.join('pts', 'encoder.pt')):
-        print('# Disabled the parameter \'--no_train_enc\'\n because there is not any checkpoint of the encoder under the name \'encoder.pt\' in folder \'pts\'')
-        TRAIN_ENCODER = True
-    if not TRAIN_CENTERS and (not os.path.isfile(os.path.join('data', 'pos_center.npy')) or not os.path.isfile(os.path.join('data', 'neg_center.npy'))):
-        print('# Disabled the parameter \'--no_train_pro\'\n because there is not file in data: pos_center.npy or neg_center.npy')
-        TRAIN_CENTERS = True
-    if not TRAIN_CMP and not os.path.isfile(os.path.join('pts', 'siam.pt')):
-        print('# Disabled the parameter \'--no_train_enc\'\n because there is not any checkpoint of the encoder under the name \'siam.pt\' in folder \'pts\'')
-        TRAIN_CMP = True
-    
     return 1
 
 def train_encoder():
