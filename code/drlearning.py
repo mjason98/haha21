@@ -49,14 +49,16 @@ class PositionalEncoding(torch.nn.Module):
         super(PositionalEncoding, self).__init__()
         self.dropout = torch.nn.Dropout(dropout)
         
-        pe = torch.zeros(max_len, d_model)
+        self.pe = torch.zeros(max_len, d_model)
         position = torch.arange(0,max_len, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(0,d_model, 2).float() * (-math.log(1000.0) / d_model))
 
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0,1)
-        self.register_buffer('pe',pe)
+        self.pe[:, 0::2] = torch.sin(position * div_term)
+        self.pe[:, 1::2] = torch.cos(position * div_term)
+        self.pe = self.pe.unsqueeze(0).transpose(0,1)
+        # self.register_buffer('pe',pe)
+        # self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        # self.to(device=self.device)
     
     def forward(self, x):
         x = x + self.pe[:x.size(0), :]
@@ -119,6 +121,9 @@ class Phi(torch.nn.Module): # encoder net
 
         self.d_model = d_model
 
+        # self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        # self.to(device=self.device)
+
     def forward(self, x_):
         x = x_ * math.sqrt(self.d_model)
         x = self.pos_encoder(x)
@@ -131,6 +136,10 @@ class Gnet(torch.nn.Module): # inverse model
         super(Gnet, self).__init__()
         self.linear1 = torch.nn.Linear(size*2,(size*2+actions)//2)
         self.linear2 = torch.nn.Linear((size*2+actions)//2, actions)
+
+        # self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        # self.to(device=self.device)
+
     def forward(self, state1, state2):
         x = torch.cat((state1, state2), dim=1)
         y = F.relu(self.linear1(x))
@@ -147,8 +156,8 @@ class Fnet(torch.nn.Module): # forward model
         self.linear2 = torch.nn.Linear(v1,v2)
         self.linear3 = torch.nn.Linear(v2,size)
         self.actions = actions
-        self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-        self.to(device=self.device)
+        # self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        # self.to(device=self.device)
 
     def forward(self, state, action):
         action_ = torch.zeros(action.shape[0],self.actions) # converta actions to one hot

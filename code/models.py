@@ -387,8 +387,8 @@ class RawDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        ids  = self.data_frame.loc[idx, self.id_name]
-        sent  = self.data_frame.loc[idx, self.x_name]
+        ids  = int(self.data_frame.loc[idx, self.id_name].replace('tweet', ''))
+        sent = self.data_frame.loc[idx, self.x_name]
         
         try:
             y1 = self.data_frame.loc[idx, self.y1_name]
@@ -415,7 +415,7 @@ class VecDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        ids  = self.data_frame.loc[idx, self.id_name]
+        ids  = int(self.data_frame.loc[idx, self.id_name].replace('tweet', ''))
         sent  = self.data_frame.loc[idx, self.x_name]
         sent = torch.Tensor([float(s) for s in sent.split()]).float()
         
@@ -478,7 +478,7 @@ class ProtoDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        ids  = self.data_frame.loc[idx, self.id_name]
+        ids  = int(self.data_frame.loc[idx, self.id_name].replace('tweet', ''))
         sent  = self.data_frame.loc[idx, self.x_name]
         sent = torch.Tensor([float(s) for s in sent.split()]).float()
         
