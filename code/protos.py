@@ -355,7 +355,7 @@ def __prototypes_with_dql(params):
     triple_sch = [float(i) / 100. for i in params['distribution_train'].split('-')]
     triple_sch = [ triple_sch[i] + (triple_sch[i-1] if i > 0 else 0)  for i in range(len(triple_sch))]
     
-    if abs(triple_sch[-1] - 100.) > 1e-9:
+    if abs(triple_sch[-1] - 0.1) > 1e-9:
         raise ValueError("Parameter 'distribution_train' most add 100, but has {}.".format(triple_sch[-1]))
 
     pos_tr = 0
