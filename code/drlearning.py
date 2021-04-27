@@ -161,12 +161,12 @@ class Fnet(torch.nn.Module): # forward model
         self.linear2 = torch.nn.Linear(v1,v2)
         self.linear3 = torch.nn.Linear(v2,size)
         self.actions = actions
-        # self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-        # self.to(device=self.device)
+        self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        self.to(device=self.device)
 
     def forward(self, state, action):
-        action_ = torch.zeros(action.shape[0],self.actions) # converta actions to one hot
-        indices = torch.stack((torch.arange(action.shape[0]), action.squeeze()), dim=0)
+        action_ = torch.zeros(action.shape[0],self.actions).to(device=self.device) # converta actions to one hot
+        indices = torch.stack((torch.arange(action.shape[0]).to(device=self.device), action.squeeze()), dim=0)
         indices = indices.tolist()
         action_[indices] = 1. 
 
