@@ -15,8 +15,10 @@ from .utils import MyBar, colorizar, TorchBoard, headerizar
 
 TRANS_NAME     = ""
 FIXED_REP_SIZE = 90
-# TOKENIZER_PRE = None
-# TRANS_MODEL   = None
+
+def setFsize(soie:int):
+    global FIXED_REP_SIZE
+    FIXED_REP_SIZE = soie
 
 def setTransName(name:str):
     global TRANS_NAME

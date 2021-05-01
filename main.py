@@ -2,7 +2,7 @@ import os, sys, argparse
 from code.models import setTransName, setSeed, makeDataSet, makeModels
 from code.models import trainModels, evaluateModels, makeTrain_and_ValData
 from code.models import convert2EncoderVec, predictWithPairModel
-from code.models import makeDataSet_Prt
+from code.models import makeDataSet_Prt, setFsize
 from code.utils  import projectData2D, makeParameters, parceParameter
 from code.protos import extractPrototypes
 
@@ -127,6 +127,7 @@ def check_params(arg=None):
     
     # Set Transformers staf
     setTransName(ONLINE_NAME)
+    setFsize(params['d_model'])
 
     # prepare environment
     if not os.path.isdir(DATA_FOLDER):
@@ -193,7 +194,7 @@ def trainSiam():
     _, t_loader = makeDataSet_Prt(TRAIN_DATA_NAME, batch=params['siam_batch'], id_h='id', text_h='vecs', class_h='is_humor', criterion='random')
     _, e_loader = makeDataSet_Prt(EVAL_DATA_NAME, batch=params['siam_batch'], id_h='id', text_h='vecs', class_h='is_humor', criterion='random')
 
-    model = makeModels('siam', int(params['siam_hsize']), 90, dropout=float(params['siam_dpr']))
+    model = makeModels('siam', int(params['siam_hsize']), int(params['d_model']), dropout=float(params['siam_dpr']))
     trainModels(model, t_loader, epochs=int(params['siam_epochs']), evalData_loader=e_loader,  
                 nameu='siam', lr=float(params['siam_lr']), use_acc=False, b_fun=min)
     

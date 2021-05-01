@@ -69,7 +69,7 @@ class VecDataEnvironment:
                     if i not in ides:
                         self.iterator.append(i)
                 del ides 
-                print ('  Taked from', colorizar(file_path))
+                print ('  Taken from', colorizar(file_path))
                 
             else:
                 cnt = mp.cpu_count()
@@ -333,7 +333,8 @@ def __prototypes_with_dql(params):
     DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
     # max_len : 5000, antes BACKPACK_SIZE+11, de esta forma quisas se adapte a ir cresiendo poco a poco
-    Qmodel = Agent_DQL(BACKPACK_SIZE+1, nhead=int(params['nhead']),nhid=int(params['nhid']),d_model=DMODEL,nlayers=int(params['n_layers']), max_len=5000,dropout=float(params['dropout']))
+    max_len = min(5000, BACKPACK_SIZE+100)
+    Qmodel = Agent_DQL(BACKPACK_SIZE+1, nhead=int(params['nhead']),nhid=int(params['nhid']),d_model=DMODEL,nlayers=int(params['n_layers']), max_len=max_len,dropout=float(params['dropout']))
     qloss = torch.nn.MSELoss().to(device=DEVICE)
     
     # seting up the taget net, and memory replay stuff
@@ -344,7 +345,7 @@ def __prototypes_with_dql(params):
     
     icm = None
     if use_icm:
-        icm = ICM_DQL(BACKPACK_SIZE+1, DMODEL*(BACKPACK_SIZE+1), DMODEL, max_len=5000, forward_scale=1., inverse_scale=1e4, nhead=int(params['nhead']),hiden_size=int(params['nhid']),nlayers=int(params['n_layers']), dropout=float(params['dropout']))
+        icm = ICM_DQL(BACKPACK_SIZE+1, DMODEL*(BACKPACK_SIZE+1), DMODEL, max_len=max_len, forward_scale=1., inverse_scale=1e4, nhead=int(params['nhead']),hiden_size=int(params['nhid']),nlayers=int(params['n_layers']), dropout=float(params['dropout']))
         all_model_params += list(icm.parameters())
         icm.train()
     
