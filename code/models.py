@@ -256,7 +256,10 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
             else:
                 y_hat = model(data['x'])
                 y1    = data['y'].to(device=model.device).flatten()
-                loss = model.criterion1(y_hat, y1)
+                try:
+                    loss = model.criterion1(y_hat, y1)
+                except:
+                    raise ValueError("ERROR, shape y_hat {} y1 {} x {}".format(y_hat.shape, y1.shape, data['x'].shape)) #para ver porque el error
             
             loss.backward()
             optim.step()
