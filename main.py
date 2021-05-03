@@ -32,7 +32,7 @@ params = {
     'vcolumn':'vecs', 
     
     # Deep Reinforcement Learning Parameters ---------------
-    'max_prototypes':20,
+    'max_prototypes':52,
     'ICM':True, 
     'lambda':0.1, 
     'eta':1.0, 
@@ -127,7 +127,7 @@ def check_params(arg=None):
     
     # Set Transformers staf
     setTransName(ONLINE_NAME)
-    setFsize(params['d_model'])
+    setFsize(int(params['d_model']))
 
     # prepare environment
     if not os.path.isdir(DATA_FOLDER):
