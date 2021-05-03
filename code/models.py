@@ -254,15 +254,14 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                 l2 = model.criterion2(y_val, y2, y1)
                 loss = etha*l1 + (1. - etha)*l2
             else:
-                x = data['x']
-                y_hat = model(x).view(x.shape[0],-1)
-                y1    = data['y'].to(device=model.device).flatten() # .view(x.shape[0],-1)
+                y_hat = model(data['x'])
+                y1    = data['y'].to(device=model.device).flatten()
                 try:
                     loss = model.criterion1(y_hat, y1)
                 except:
-                    print(y1.shape)
-                    print(y_hat.shape)
-                    raise ValueError("ERROR") #para ver porque el error
+                    # tamano 1
+                    y_hat = y_hat.view(1,-1)
+                    loss  = model.criterion1(y_hat, y1)
             
             loss.backward()
             optim.step()
