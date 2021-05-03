@@ -254,7 +254,7 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                 l2 = model.criterion2(y_val, y2, y1)
                 loss = etha*l1 + (1. - etha)*l2
             else:
-                y_hat = model(data['x']).flatten()
+                y_hat = model(data['x'])
                 y1    = data['y'].to(device=model.device).flatten()
                 loss = model.criterion1(y_hat, y1)
             
@@ -264,7 +264,7 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
             with torch.no_grad():
                 total_loss += loss.item() * y1.shape[0]
                 if use_acc: 
-                    total_acc += (y1 == y_hat.argmax(dim=-1)).sum().item()
+                    total_acc += (y1 == y_hat.argmax(dim=-1).flatten()).sum().item()
                 dl += y1.shape[0]
             bar.next(total_loss/dl)
         if use_acc:
