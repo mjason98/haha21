@@ -259,7 +259,9 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                 try:
                     loss = model.criterion1(y_hat, y1)
                 except:
-                    raise ValueError("ERROR, shape y_hat {} y1 {} x {}".format(y_hat.shape, y1.shape, data['x'].shape)) #para ver porque el error
+                    print(y1.shape)
+                    print(y_hat.shape)
+                    raise ValueError("ERROR") #para ver porque el error
             
             loss.backward()
             optim.step()
