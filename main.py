@@ -209,11 +209,7 @@ def trainSiam():
 if __name__ == '__main__':
     if check_params(arg=sys.argv[1:]) == 0:
         exit(0)
-    
-    global TRAIN_DATA_NAME
-    global EVAL_DATA_NAME
-    global TEST_DATA_NAME
-    
+
     # This is temporal -------------------
     TRAIN_DATA_NAME, EVAL_DATA_NAME = makeTrain_and_ValData(TRAIN_DATA_NAME, class_label='is_humor', df=DATA_FOLDER)
     # This is temporal -------------------
