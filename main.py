@@ -2,7 +2,7 @@ import os, sys, argparse
 from code.models import setTransName, setSeed, makeDataSet, makeModels
 from code.models import trainModels, evaluateModels, makeTrain_and_ValData
 from code.models import convert2EncoderVec, predictWithPairModel
-from code.models import makeDataSet_Prt, setFsize
+from code.models import makeDataSet_Prt, setFsize, setW
 from code.utils  import projectData2D, makeParameters, parceParameter
 from code.protos import extractPrototypes
 
@@ -59,7 +59,9 @@ params = {
     'siam_lr':0.0001, 
     'siam_epochs': 50,
     'siam_hsize':64,
-    'siam_dpr':0.05
+    'siam_dpr':0.05,
+    #---GENERAL -----------------------------------------------
+    'num_workers':4
 }
 
 def check_params(arg=None):
@@ -128,6 +130,7 @@ def check_params(arg=None):
     # Set Transformers staf
     setTransName(ONLINE_NAME)
     setFsize(int(params['d_model']))
+    setW(int(params['num_workers']))
 
     # prepare environment
     if not os.path.isdir(DATA_FOLDER):

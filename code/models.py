@@ -15,6 +15,11 @@ from .utils import MyBar, colorizar, TorchBoard, headerizar
 
 TRANS_NAME     = ""
 FIXED_REP_SIZE = 90
+WORKS = 4
+
+def setW(w:int):
+    global WORKS
+    WORKS = w
 
 def setFsize(soie:int):
     global FIXED_REP_SIZE
@@ -504,17 +509,17 @@ class ProtoDataset(Dataset):
 
 def makeDataSet(csv_path:str, batch, shuffle=True, id_h='id', text_h='text', class_h='is_humor'):
     data   =  RawDataset(csv_path, id_h=id_h, text_h=text_h, class_h=class_h)
-    loader =  DataLoader(data, batch_size=batch, shuffle=shuffle, num_workers=4, drop_last=False)
+    loader =  DataLoader(data, batch_size=batch, shuffle=shuffle, num_workers=WORKS, drop_last=False)
     return data, loader
 
 def makeDataSet_Vec(csv_path:str, batch, shuffle=True, id_h='id', text_h='text', class_h='is_humor'):
     data   =  VecDataset(csv_path, id_h=id_h, text_h=text_h, class_h=class_h)
-    loader =  DataLoader(data, batch_size=batch, shuffle=shuffle, num_workers=4, drop_last=False)
+    loader =  DataLoader(data, batch_size=batch, shuffle=shuffle, num_workers=WORKS, drop_last=False)
     return data, loader
 
 def makeDataSet_Prt(csv_path:str, batch, shuffle=True, id_h='id', text_h='text', class_h='is_humor', criterion='all'):
     data   =  ProtoDataset(csv_path, np.load(os.path.join('data', 'pos_center.npy')), np.load(os.path.join('data', 'neg_center.npy')),id_h=id_h, text_h=text_h, class_h=class_h, criterion=criterion)
-    loader =  DataLoader(data, batch_size=batch, shuffle=shuffle, num_workers=4, drop_last=False)
+    loader =  DataLoader(data, batch_size=batch, shuffle=shuffle, num_workers=WORKS, drop_last=False)
     return data, loader
 
 #================= TEMPORAL FUNCTIONS ===============================
