@@ -107,9 +107,17 @@ def check_params(arg=None):
 					   required=False, action='store_true', default=False)
    
     returns = parse.parse_args(arg)
+
     TEST_DATA_NAME   = returns.predict
     TRAIN_DATA_NAME  = returns.train_data
     EVAL_DATA_NAME   = returns.dev_data
+
+    if not os.path.isfile(TEST_DATA_NAME):
+        raise ValueError("File {} do not exist!".format(TEST_DATA_NAME))
+    if not os.path.isfile(EVAL_DATA_NAME):
+        raise ValueError("File {} do not exist!".format(EVAL_DATA_NAME))
+    if not os.path.isfile(TRAIN_DATA_NAME):
+        raise ValueError("File {} do not exist!".format(TRAIN_DATA_NAME))
     
     ONLINE_NAME      = returns.trsn
     TRAIN_ENCODER    = bool(returns.no_train_enc)
