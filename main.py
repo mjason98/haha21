@@ -112,12 +112,6 @@ def check_params(arg=None):
     TRAIN_DATA_NAME  = returns.train_data
     EVAL_DATA_NAME   = returns.dev_data
 
-    if not os.path.isfile(TEST_DATA_NAME):
-        raise ValueError("File {} do not exist!".format(TEST_DATA_NAME))
-    if not os.path.isfile(EVAL_DATA_NAME):
-        raise ValueError("File {} do not exist!".format(EVAL_DATA_NAME))
-    if not os.path.isfile(TRAIN_DATA_NAME):
-        raise ValueError("File {} do not exist!".format(TRAIN_DATA_NAME))
     
     ONLINE_NAME      = returns.trsn
     TRAIN_ENCODER    = bool(returns.no_train_enc)
@@ -155,10 +149,6 @@ def train_encoder():
     global TEST_DATA_NAME
     global EVAL_DATA_NAME
     global TRAIN_DATA_NAME
-
-    # This is temporal -------------------
-    TRAIN_DATA_NAME, EVAL_DATA_NAME = makeTrain_and_ValData(TRAIN_DATA_NAME, class_label='is_humor', df=DATA_FOLDER)
-    # This is temporal -------------------
 
     t_data, t_loader = makeDataSet(TRAIN_DATA_NAME, batch=int(params['batch_encoder']), id_h='id', text_h='text', class_h='is_humor')
     e_data, e_loader = makeDataSet(EVAL_DATA_NAME,  batch=int(params['batch_encoder']), id_h='id', text_h='text', class_h='is_humor')
@@ -219,6 +209,17 @@ def trainSiam():
 if __name__ == '__main__':
     if check_params(arg=sys.argv[1:]) == 0:
         exit(0)
+    
+    # This is temporal -------------------
+    TRAIN_DATA_NAME, EVAL_DATA_NAME = makeTrain_and_ValData(TRAIN_DATA_NAME, class_label='is_humor', df=DATA_FOLDER)
+    # This is temporal -------------------
+    
+    if not os.path.isfile(TEST_DATA_NAME):
+        raise ValueError("File {} do not exist!".format(TEST_DATA_NAME))
+    if not os.path.isfile(EVAL_DATA_NAME):
+        raise ValueError("File {} do not exist!".format(EVAL_DATA_NAME))
+    if not os.path.isfile(TRAIN_DATA_NAME):
+        raise ValueError("File {} do not exist!".format(TRAIN_DATA_NAME))
 
     if TRAIN_ENCODER:
         train_encoder()
