@@ -45,13 +45,13 @@ params = {
     'memory_size':100,
     
     'dropout':0.1,
-    'nhead':3,
+    'nhead':2,
     'nhid':128,
-    'd_model':90,
+    'd_model':50,
     'n_layers':3,
     'target_refill':200,
     'reduced_data_prototypes':True,
-    'distribution_train':'85-5-5-5', #the sum of this most be 100
+    'distribution_train':'80-5-5-5-5', #the sum of this most be 100
     # ---------------------------------------------------------
 
     # Siames Net parameters -----------------------------------
@@ -222,12 +222,13 @@ if __name__ == '__main__':
         if not os.path.isfile(TRAIN_DATA_NAME):
             raise ValueError("File {} do not exist!".format(TRAIN_DATA_NAME))
         train_encoder()
+    else:
+        # temporal code, delete later ---------
+        TRAIN_DATA_NAME = 'data/train_en.csv'
+        EVAL_DATA_NAME  = 'data/dev_en.csv'
+        TEST_DATA_NAME  = 'data/test_en.csv'
+        # temporal code, delete later ---------
         
-    # temporal code, delete later ---------
-    TRAIN_DATA_NAME = 'data/train_en.csv'
-    EVAL_DATA_NAME  = 'data/dev_en.csv'
-    TEST_DATA_NAME  = 'data/test_en.csv'
-    # temporal code, delete later ---------
     if TRAIN_CENTERS:
         params.update({'data_path':TRAIN_DATA_NAME, 'eval_data_path':EVAL_DATA_NAME})
         extractPrototypes(method='dql', params=params)

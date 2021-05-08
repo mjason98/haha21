@@ -354,15 +354,17 @@ def __prototypes_with_dql(params):
     
     greater_reward = -(2**30)
     triple_sch = [float(i) / 100. for i in params['distribution_train'].split('-')]
-    triple_sch = [ triple_sch[i] + (triple_sch[i-1] if i > 0 else 0)  for i in range(len(triple_sch))]
+    for i in range(1,len(triple_sch)): triple_sch[i] += triple_sch[i-1]
+    # triple_sch = [ triple_sch[i] + (triple_sch[i-1] if i > 0 else 0)  for i in range(len(triple_sch))]
     
-    if abs(triple_sch[-1] - 0.1) > 1e-9:
-        raise ValueError("Parameter 'distribution_train' most add 100, but has {}.".format(triple_sch[-1]))
+    if abs(triple_sch[-1] - 1.) > 1e-9:
+        raise ValueError("Parameter 'distribution_train' most add 100, but has {}.".format(triple_sch[-1]*100.))
 
     pos_tr = 0
     for i in range(EPOCHS):
         print('# Epoch {}/{} {}'.format(i+1, EPOCHS, 'with eps' if i >= switch_to_eps_greedy else 'with softmax policy'))
-        if int(EPOCHS * triple_sch[pos_tr]) == i:
+        while pos_tr < len(triple_sch) and int(EPOCHS * triple_sch[pos_tr]) <= i+1:
+            print(triple_sch[pos_tr])
             env.mulIterModulo(2.0)
             pos_tr += 1
 
