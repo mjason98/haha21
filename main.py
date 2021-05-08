@@ -210,19 +210,19 @@ if __name__ == '__main__':
     if check_params(arg=sys.argv[1:]) == 0:
         exit(0)
 
-    # This is temporal -------------------
-    TRAIN_DATA_NAME, EVAL_DATA_NAME = makeTrain_and_ValData(TRAIN_DATA_NAME, class_label='is_humor', df=DATA_FOLDER)
-    # This is temporal -------------------
-    
-    if not os.path.isfile(TEST_DATA_NAME):
-        raise ValueError("File {} do not exist!".format(TEST_DATA_NAME))
-    if not os.path.isfile(EVAL_DATA_NAME):
-        raise ValueError("File {} do not exist!".format(EVAL_DATA_NAME))
-    if not os.path.isfile(TRAIN_DATA_NAME):
-        raise ValueError("File {} do not exist!".format(TRAIN_DATA_NAME))
-
     if TRAIN_ENCODER:
+        # This is temporal -------------------
+        TRAIN_DATA_NAME, EVAL_DATA_NAME = makeTrain_and_ValData(TRAIN_DATA_NAME, class_label='is_humor', df=DATA_FOLDER)
+        # This is temporal -------------------
+        
+        if not os.path.isfile(TEST_DATA_NAME):
+            raise ValueError("File {} do not exist!".format(TEST_DATA_NAME))
+        if not os.path.isfile(EVAL_DATA_NAME):
+            raise ValueError("File {} do not exist!".format(EVAL_DATA_NAME))
+        if not os.path.isfile(TRAIN_DATA_NAME):
+            raise ValueError("File {} do not exist!".format(TRAIN_DATA_NAME))
         train_encoder()
+        
     # temporal code, delete later ---------
     TRAIN_DATA_NAME = 'data/train_en.csv'
     EVAL_DATA_NAME  = 'data/dev_en.csv'
