@@ -364,7 +364,6 @@ def __prototypes_with_dql(params):
     for i in range(EPOCHS):
         print('# Epoch {}/{} {}'.format(i+1, EPOCHS, 'with eps' if i >= switch_to_eps_greedy else 'with softmax policy'))
         while pos_tr < len(triple_sch) and int(EPOCHS * triple_sch[pos_tr]) <= i+1:
-            print(triple_sch[pos_tr])
             env.mulIterModulo(2.0)
             pos_tr += 1
 
