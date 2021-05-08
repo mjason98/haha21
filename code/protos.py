@@ -412,7 +412,7 @@ def __prototypes_with_dql(params):
             if i_targetFill % target_refill == 0:
                 i_targetFill = 0
                 Qtarget.load_state_dict(Qmodel.state_dict())
-        if greater_reward <= acc_reward:
+        if greater_reward <= acc_reward and (pos_tr >= len(triple_sch)):
             greater_reward = acc_reward
             Qmodel.save(os.path.join('pts', 'dql_model.pt'))
             if icm is not None:
