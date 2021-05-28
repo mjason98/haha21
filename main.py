@@ -30,6 +30,7 @@ params = {
     'selop':'addn', #first
     'lcolumn':'is_humor', 
     'vcolumn':'vecs', 
+    'seq_len':64,
     
     # Deep Reinforcement Learning Parameters ---------------
     'max_prototypes':52,
@@ -153,7 +154,7 @@ def train_encoder():
     t_data, t_loader = makeDataSet(TRAIN_DATA_NAME, batch=int(params['batch_encoder']), id_h='id', text_h='text', class_h='is_humor')
     e_data, e_loader = makeDataSet(EVAL_DATA_NAME,  batch=int(params['batch_encoder']), id_h='id', text_h='text', class_h='is_humor')
 
-    model = makeModels('encoder', int(params['hsize_encoder']), dropout=float(params['dpr_encoder']), max_length=64, selection=str(params['selop']))
+    model = makeModels('encoder', int(params['hsize_encoder']), dropout=float(params['dpr_encoder']), max_length=int(params['seq_len']), selection=str(params['selop']))
     trainModels(model, t_loader, epochs=int(params['epochs_encoder']), evalData_loader=e_loader, 
                 nameu='encoder', optim=model.makeOptimizer(lr=float(params['lr_encoder']), lr_factor=float(params['lr_factor_encoder']), algorithm=str(params['optm_encoder'])))
 
