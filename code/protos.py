@@ -141,13 +141,14 @@ class VecDataEnvironment:
         lab = int(self.data.loc[i, self.lname]) 
         return cad, lab    
     
-    def export_prototypes(self, file_list, label_list):
+    def export_prototypes(self, file_list, label_list, silense=False):
         ''' export to a .npy the vectors in the backpak\n
             filelist: [f1:Str, f2:str, ... , fn:str] \n 
             label_list: [l1:int, l2:int, ..., ln:int] \n 
             the vectors with li label will be placed in fi file for all i'''
         for file_, label_ in zip(file_list, label_list):
-            print ('# Exporting prototypes to', colorizar(os.path.basename(file_)))
+            if not silense:
+                print ('# Exporting prototypes to', colorizar(os.path.basename(file_)))
             expo = []
             for v,l in zip(self.backpack, self.backpack_l):
                 if l != label_: continue
@@ -353,6 +354,7 @@ def __prototypes_with_dql(params):
     Qmodel.train()
     
     greater_reward = -(2**30)
+    greater_reward_c = greater_reward
     triple_sch = [float(i) / 100. for i in params['distribution_train'].split('-')]
     for i in range(1,len(triple_sch)): triple_sch[i] += triple_sch[i-1]
     # triple_sch = [ triple_sch[i] + (triple_sch[i-1] if i > 0 else 0)  for i in range(len(triple_sch))]
@@ -412,6 +414,9 @@ def __prototypes_with_dql(params):
             if i_targetFill % target_refill == 0:
                 i_targetFill = 0
                 Qtarget.load_state_dict(Qmodel.state_dict())
+        if greater_reward_c < acc_reward:
+            greater_reward_c = acc_reward
+            env.export_prototypes(file_list  = [os.path.join('data','pos_center'), os.path.join('data','neg_center')], label_list = [1, 0])
         if greater_reward <= acc_reward and (pos_tr >= len(triple_sch)):
             greater_reward = acc_reward
             Qmodel.save(os.path.join('pts', 'dql_model.pt'))
@@ -426,36 +431,36 @@ def __prototypes_with_dql(params):
     del replay
 
     # best model
-    Qmodel.load(os.path.join('pts', 'dql_model.pt'))
-    Qmodel.eval()
-    it_episode, acc_reward = 0, 0.
-    init_time = time.time()
+    # Qmodel.load(os.path.join('pts', 'dql_model.pt'))
+    # Qmodel.eval()
+    # it_episode, acc_reward = 0, 0.
+    # init_time = time.time()
 
-    env.resetIterator()
+    # env.resetIterator()
 
     print ('# Ending:','Deep Q Learning algorithm')
-    state1 = prepareBackpackState(*env.reset()).unsqueeze(0)
-    with torch.no_grad():
-        while True:
-            # parafernalia ----------------------------
-            it_episode += 1
-            # -----------------------------------------
-            q_val_pred = Qmodel(state1)
-            action = int(__policy_dql(q_val_pred, nactions=BACKPACK_SIZE+1, eps=0.01))
+    # state1 = prepareBackpackState(*env.reset()).unsqueeze(0)
+    # with torch.no_grad():
+    #     while True:
+    #         # parafernalia ----------------------------
+    #         it_episode += 1
+    #         # -----------------------------------------
+    #         q_val_pred = Qmodel(state1)
+    #         action = int(__policy_dql(q_val_pred, nactions=BACKPACK_SIZE+1, eps=0.01))
 
-            back_state, vec_state , e_reward, done = env.step(action)
-            state1 = prepareBackpackState(back_state, vec_state).unsqueeze(0)
-            acc_reward += e_reward
+    #         back_state, vec_state , e_reward, done = env.step(action)
+    #         state1 = prepareBackpackState(back_state, vec_state).unsqueeze(0)
+    #         acc_reward += e_reward
             
-            all_obj_seeit = done
-            if done:
-                print ('\r  It {} with reward {:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)))
-                break
-            print ('\r  It {} with reward {:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)), end=' ')
+    #         all_obj_seeit = done
+    #         if done:
+    #             print ('\r  It {} with reward {:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)))
+    #             break
+    #         print ('\r  It {} with reward {:.4f} | {}'.format(it_episode, acc_reward, getSTime(time.time()-init_time)), end=' ')
 
     # esporting final state of the backpack
-    env.export_prototypes(file_list  = [os.path.join('data','pos_center'), os.path.join('data','neg_center')], 
-                          label_list = [1                                , 0])
+    # env.export_prototypes(file_list  = [os.path.join('data','pos_center'), os.path.join('data','neg_center')], 
+                        #   label_list = [1                                , 0])
     del env
 
 def extractPrototypes(method, params):
