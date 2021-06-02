@@ -259,6 +259,7 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
             bett = 'class1'
         elif bett == etha[1]:
             bett = 'reg1'
+            board.setFunct( min )
         else:
             bett = 'none'
     

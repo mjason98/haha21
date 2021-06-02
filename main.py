@@ -160,7 +160,7 @@ def train_encoder():
 
     model = makeModels('encoder' if not __mtl else 'encoder_mtl', int(params['hsize_encoder']), dropout=float(params['dpr_encoder']), max_length=int(params['seq_len']), selection=str(params['selop']))
     trainModels(model, t_loader, epochs=int(params['epochs_encoder']), evalData_loader=e_loader, mtl=__mtl, etha=params['encoder_etha'],
-                nameu='encoder', optim=model.makeOptimizer(lr=float(params['lr_encoder']), lr_factor=float(params['lr_factor_encoder']), algorithm=str(params['optm_encoder'])))
+                nameu='encoder' if not __mtl else 'encoder_mtl', optim=model.makeOptimizer(lr=float(params['lr_encoder']), lr_factor=float(params['lr_factor_encoder']), algorithm=str(params['optm_encoder'])))
 
     del t_loader
     del e_loader
