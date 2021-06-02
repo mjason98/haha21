@@ -77,7 +77,7 @@ class ADDN(torch.nn.Module):
 
 # The encoder last layers
 class Encod_Last_Layers(nn.Module):
-    def __init__(self, hidden_size, vec_size):
+    def __init__(self, hidden_size, vec_size, mtl=False):
         super(Encod_Last_Layers, self).__init__()
         self.mid_size = FIXED_REP_SIZE
         self.Dense1   = nn.Sequential(nn.Linear(vec_size, hidden_size), nn.LeakyReLU(),
@@ -85,15 +85,20 @@ class Encod_Last_Layers(nn.Module):
         # Classification
         self.Task1    = nn.Linear(self.mid_size, 2)
         # Regretion
-        # self.Task2   = nn.Linear(self.mid_size, 1)
+        if mtl:
+            self.mtl = True
+            self.Task2 = nn.Linear(self.mid_size, 1)
 
     def forward(self, X, ret_vec=False):
         y_hat = self.Dense1(X)
         if ret_vec:
             return y_hat
         y1 = self.Task1(y_hat).squeeze()
-        # y2 = self.Task2(y_hat).squeeze()
-        return y1 #, y2
+
+        if self.mtl:
+            y2 = self.Task2(y_hat).squeeze()
+            return y1, y2
+        return y1
 
     def load(self, path):
         self.load_state_dict(torch.load(path))
@@ -103,15 +108,15 @@ class Encod_Last_Layers(nn.Module):
 
 # The encoder used in this work
 class Encoder_Model(nn.Module):
-    def __init__(self, hidden_size, vec_size=768, dropout=0.1, max_length=120, selection='first'):
+    def __init__(self, hidden_size, vec_size=768, dropout=0.1, max_length=120, selection='first', mtl=False):
         super(Encoder_Model, self).__init__()
-        self.criterion1 = nn.CrossEntropyLoss()#weight=torch.Tensor([0.7,0.3]))
-        # self.criterion2 = MaskedMSELoss()
+        self.criterion1 = nn.CrossEntropyLoss()
+        self.criterion2 = MaskedMSELoss()
 
         self.max_length = max_length
         self.tok, self.bert = make_trans_pretrained_model()
 
-        self.encoder_last_layer = Encod_Last_Layers(hidden_size, vec_size)
+        self.encoder_last_layer = Encod_Last_Layers(hidden_size, vec_size, mtl)
         self.selection = None
 
         if selection   == 'addn':
@@ -228,10 +233,12 @@ def makeModels(name:str, hidden_size, _tr_vec_size=768, dropout=0.0, max_length=
         return DistanceModel(d=F.pairwise_distance)
     elif name == 'siam':
         return Siam_Model(_tr_vec_size, hidden_size, dropout=dropout)
+    elif name == 'encoder_mtl':
+        return Encoder_Model(hidden_size, _tr_vec_size, dropout=dropout, max_length=max_length, selection=selection, mtl=True)
     else:
         raise ValueError('# The models name {} is invalid, instead use one of this: [encoder, siam, euclid-distance]'.format(headerizar(name)))
 
-def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, etha=1., nameu='encoder', optim=None, b_fun=None, smood=False, mtl=False, use_acc=True):
+def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, etha='1', nameu='encoder', optim=None, b_fun=None, smood=False, mtl=False, use_acc=True):
     if epochs <= 0:
         return
     if optim is None:
@@ -241,23 +248,46 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
     board = TorchBoard()
     if b_fun is not None:
         board.setFunct(b_fun)
+
+    if mtl:
+        etha = [ float(v) for v in etha.split('-')]
+        if abs(sum(etha) - 1.0) > 1e-9:
+            raise ValueError('etha parameter most add up 1.0, but sums {} istead'.format(sum(etha)))
+        bett = max(etha)
+
+        if bett == etha[0]:
+            bett = 'class1'
+        elif bett == etha[1]:
+            bett = 'reg1'
+        else:
+            bett = 'none'
     
     for e in range(epochs):
         bar = MyBar('Epoch '+str(e+1)+' '*(int(math.log10(epochs)+1) - int(math.log10(e+1)+1)) , 
                     max=len(Data_loader)+(len(evalData_loader if evalData_loader is not None else 0)))
         total_loss, total_acc, dl = 0., 0., 0
+        if mtl:
+            total_mse = 0.0
         for data in Data_loader:
             optim.zero_grad()
             
             # Multi-Task learning for now not
             if mtl:
                 y_hat, y_val = model(data['x'])
-                y1    = data['y'].to(device=model.device)
-                y2 = data['v'].to(device=model.device)
+                # y_val = y_val.float()
 
-                l1 = model.criterion1(y_hat, y1)
-                l2 = model.criterion2(y_val, y2, y1)
-                loss = etha*l1 + (1. - etha)*l2
+                y1 = data['y'].to(device=model.device).flatten()
+                y2 = data['v'].to(device=model.device).float().flatten()
+                # Tamano 1
+                try:
+                    l1 = model.criterion1(y_hat, y1)
+                    l2 = model.criterion2(y_val, y2, y1)
+                    loss = etha[0]*l1 + etha[1]*l2
+                except:
+                    y_hat = y_hat.view(1,-1)
+                    l1 = model.criterion1(y_hat, y1)
+                    l2 = model.criterion2(y_val, y2, y1)
+                    loss = etha[0]*l1 + etha[1]*l2
             else:
                 y_hat = model(data['x'])
                 y1    = data['y'].to(device=model.device).flatten()
@@ -275,37 +305,59 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                 total_loss += loss.item() * y1.shape[0]
                 if use_acc: 
                     total_acc += (y1 == y_hat.argmax(dim=-1).flatten()).sum().item()
+                    if mtl:
+                        total_mse += l2.item() * y2.shape[0]
                 dl += y1.shape[0]
             bar.next(total_loss/dl)
         if use_acc:
             res = board.update('train', total_acc/dl, getBest=True)
+            if mtl:
+                res2 = board.update('train_mse', total_mse/dl, getBest=True)
+                if bett == 'reg1':
+                    res = res2
         else:
             res = board.update('train', total_loss/dl, getBest=True)
         
         # Evaluate the model
         if evalData_loader is not None:
             total_loss, total_acc, dl= 0,0,0
+            if mtl:
+                total_mse = 0.0
             with torch.no_grad():
                 for data in evalData_loader:
-                    # y_hat, y_val = model(data['x'])
-                    y_hat = model(data['x'])
-                    y1 = data['y'].to(device=model.device)
-                    # y2 = data['v'].to(device=model.device)
-
                     if mtl:
-                        l1 = model.criterion1(y_hat, y1)
-                        l2 = model.criterion2(y_val, y2, y1)
-                        loss = etha*l1 + (1. - etha)*l2
+                        y_hat, y_val = model(data['x'])
+                        # y_val.float
+                        y1 = data['y'].to(device=model.device)
+                        y2 = data['v'].to(device=model.device).float()
+                        # Tamano 1
+                        try:
+                            l1 = model.criterion1(y_hat, y1)
+                            l2 = model.criterion2(y_val, y2, y1)
+                            loss = etha[0]*l1 + etha[1]*l2
+                        except:
+                            y_hat = y_hat.view(1,-1)
+                            l1 = model.criterion1(y_hat, y1)
+                            l2 = model.criterion2(y_val, y2, y1)
+                            loss = etha[0]*l1 + etha[1]*l2
                     else:
+                        y_hat = model(data['x'])
+                        y1 = data['y'].to(device=model.device)
                         loss = model.criterion1(y_hat, y1)
                     
                     total_loss += loss.item() * y1.shape[0]
                     if use_acc:
                         total_acc += (y1 == y_hat.argmax(dim=-1)).sum().item()
+                        if mtl:
+                            total_mse += l1.item() * y2.shape[0]
                     dl += y1.shape[0]
                     bar.next()
             if use_acc:
                 res = board.update('test', total_acc/dl, getBest=True)
+                if mtl:
+                    res2 = board.update('test_mse', total_mse/dl, getBest=True)
+                    if bett == 'reg1':
+                        res = res2
             else:
                 res = board.update('test', total_loss/dl, getBest=True)
         bar.finish()
@@ -315,7 +367,7 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
             model.save(os.path.join('pts', nameu+'.pt'))
     board.show(os.path.join('out', nameu+'.png'), plot_smood=smood)
 
-def evaluateModels(model, testData_loader, header=('id', 'is_humor', 'humor_rating'), cleaner=[], name='pred'):
+def evaluateModels(model, testData_loader, header=('id', 'is_humor', 'humor_rating'), cleaner=[], name='pred', mtl=False):
     model.eval()
     
     pred_path = os.path.join('out', name+'.csv')
@@ -324,41 +376,14 @@ def evaluateModels(model, testData_loader, header=('id', 'is_humor', 'humor_rati
     Ids, lab, val = [], [], []
     
     cpu0 = torch.device("cpu")
-    # with torch.no_grad():
-    #     for data in testData_loader:
-    #         y_hat, y_val = model(data['x'])
-    #         y_hat, y_val = y_hat.to(device=cpu0), y_val.to(device=cpu0)
-            
-    #         y_hat = y_hat.argmax(dim=-1).squeeze()
-    #         y_val = y_val.squeeze() * y_hat
-    #         ids = data['id'].squeeze()
-            
-    #         for i in range(ids.shape[0]):
-    #             Ids.append(ids[i].item())
-    #             lab.append(y_hat[i].item())
-    #             val.append(y_val[i].item())
-    #         bar.next()
-    # bar.finish()
-
-    # Ids, lab, val = pd.Series(Ids), pd.Series(lab), pd.Series(val)
-    # data = pd.concat([Ids, lab, val], axis=1)
-    # del Ids
-    # del lab
-    # del val
-    # data.to_csv(pred_path, index=None, header=header)
-    # del data
-    # print ('# Predictions saved in', colorizar(pred_path))
-    
-    # if len(cleaner) > 0:
-    #     data = pd.read_csv(pred_path)
-    #     data.drop(cleaner, axis=1, inplace=True)
-    #     data.to_csv(pred_path, index=None)
-    #     print ('# Cleaned from', ', '.join(cleaner) + '.')
-
     with torch.no_grad():
         for data in testData_loader:
-            y_hat = model(data['x'])
-            y_hat = y_hat.to(device=cpu0)
+            if mtl:
+                y_hat, y_val = model(data['x'])
+                y_hat, y_val = y_hat.to(device=cpu0), y_val.to(device=cpu0)
+            else: 
+                y_hat = model(data['x'])
+                y_hat = y_hat.to(device=cpu0)
             
             y_hat = y_hat.argmax(dim=-1).squeeze()
             ids = data['id'].squeeze()
@@ -366,13 +391,21 @@ def evaluateModels(model, testData_loader, header=('id', 'is_humor', 'humor_rati
             for i in range(ids.shape[0]):
                 Ids.append(ids[i].item())
                 lab.append(y_hat[i].item())
+                if mtl:
+                    val.append(y_val[i].item())
             bar.next()
     bar.finish()
     
     Ids, lab = pd.Series(Ids), pd.Series(lab)
-    data = pd.concat([Ids, lab], axis=1)
-    del Ids
-    del lab
+    if mtl:
+        val = pd.Series(val)
+        data = pd.concat([Ids, lab, val], axis=1)
+        del val
+    else:
+        data = pd.concat([Ids, lab], axis=1)
+        del Ids
+        del lab
+
     data.to_csv(pred_path, index=None, header=header)
     del data
     print ('# Predictions saved in', colorizar(pred_path))
@@ -404,13 +437,11 @@ class RawDataset(Dataset):
         
         try:
             y1 = self.data_frame.loc[idx, self.y1_name]
-            # regv  = self.data_frame.loc[idx, 'humor_rating'] if int(value) != 0 else 0.
+            regv  = self.data_frame.loc[idx, 'humor_rating'] if int(y1) != 0 else 0.
         except:
-            y1 = 0
-            # value, regv = 0, 0.
+            y1, regv = 0, 0.
 
-        # sample = {'x': sent, 'y': value, 'v':regv, 'id':ids}
-        sample = {'x': sent, 'y': y1, 'id':ids}
+        sample = {'x': sent, 'y': y1, 'id':ids, 'v':regv}
         return sample
 
 class VecDataset(Dataset):
@@ -433,13 +464,11 @@ class VecDataset(Dataset):
         
         try:
             y1 = self.data_frame.loc[idx, self.y1_name]
-            # regv  = self.data_frame.loc[idx, 'humor_rating'] if int(value) != 0 else 0.
+            regv  = self.data_frame.loc[idx, 'humor_rating'] if int(y1) != 0 else 0.
         except:
-            y1 = 0
-            # value, regv = 0, 0.
-
-        # sample = {'x': sent, 'y': value, 'v':regv, 'id':ids}
-        sample = {'x': sent, 'y': y1, 'id':ids}
+            y1, regv = 0, 0.
+        
+        sample = {'x': sent, 'y': y1, 'id':ids, 'v':regv}
         return sample
 
 class ProtoDataset(Dataset):
@@ -586,7 +615,7 @@ def convert2EncoderVec(data_name:str, model, loader, save_pickle=False, save_as_
                 y_c = None
             
             try:
-                y_v = data['v']
+                y_v = data['v'].float()
             except:
                 y_v = None
             

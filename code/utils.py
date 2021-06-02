@@ -101,12 +101,12 @@ class TorchBoard(object):
 	'''
 	def __init__(self):
 		self.dict = {}
-		self.labels = ['train', 'test']
+		self.labels = ['train', 'test', 'train_mse', 'test_mse']
 		self.future_updt = True
 		self.best_funct = None
 		self.setFunct( max )
-		self.best   = [None, None]
-		self.best_p = [0, 0]
+		self.best   = [None, None, None, None]
+		self.best_p = [0, 0, 0, 0]
 
 	def setFunct(self, fun):
 		'''
@@ -137,6 +137,10 @@ class TorchBoard(object):
 		pk = 1
 		if label == 'train':
 			pk = 0
+		elif label == 'train_mse':
+			pk = 2
+		elif label == 'test_mse':
+			pk = 3
 
 		if self.dict.get(label) == None:
 			self.dict.update({label:[value]})

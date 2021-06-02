@@ -10,9 +10,9 @@ from code.protos import extractPrototypes
 
 OUT_FOLDER       = 'out'
 DATA_FOLDER      = 'data'
-TRAIN_DATA_NAME  = 'data/haha_2018_train.csv'
+TRAIN_DATA_NAME  = 'data/haha_2021_train.csv' #'data/haha_2018_train.csv'
 EVAL_DATA_NAME   = 'a.csv'
-TEST_DATA_NAME   = 'data/haha_2018_test_gold.csv'
+TEST_DATA_NAME   = 'data/haha_2021_test.csv' #'data/haha_2018_test_gold.csv'
 TRAIN_ENCODER    = True
 TRAIN_CENTERS    = True
 TRAIN_CMP        = True
@@ -31,6 +31,8 @@ params = {
     'lcolumn':'is_humor', 
     'vcolumn':'vecs', 
     'seq_len':64,
+    'encoder_mtl': False,
+    'encoder_etha':'0.1-0.9',
     
     # Deep Reinforcement Learning Parameters ---------------
     'max_prototypes':52,
@@ -154,9 +156,12 @@ def train_encoder():
     t_data, t_loader = makeDataSet(TRAIN_DATA_NAME, batch=int(params['batch_encoder']), id_h='id', text_h='text', class_h='is_humor')
     e_data, e_loader = makeDataSet(EVAL_DATA_NAME,  batch=int(params['batch_encoder']), id_h='id', text_h='text', class_h='is_humor')
 
-    model = makeModels('encoder', int(params['hsize_encoder']), dropout=float(params['dpr_encoder']), max_length=int(params['seq_len']), selection=str(params['selop']))
-    trainModels(model, t_loader, epochs=int(params['epochs_encoder']), evalData_loader=e_loader, 
-                nameu='encoder', optim=model.makeOptimizer(lr=float(params['lr_encoder']), lr_factor=float(params['lr_factor_encoder']), algorithm=str(params['optm_encoder'])))
+    __mtl = bool(params['encoder_mtl'])
+
+    model = makeModels('encoder' if not __mtl else 'encoder_mtl', int(params['hsize_encoder']), dropout=float(params['dpr_encoder']), max_length=int(params['seq_len']), selection=str(params['selop']))
+    model.save(os.path.join('pts', 'encoder.pt' if not __mtl else 'encoder_mtl.pt'))
+    # trainModels(model, t_loader, epochs=int(params['epochs_encoder']), evalData_loader=e_loader, mtl=__mtl, etha=params['encoder_etha'],
+                # nameu='encoder', optim=model.makeOptimizer(lr=float(params['lr_encoder']), lr_factor=float(params['lr_factor_encoder']), algorithm=str(params['optm_encoder'])))
 
     del t_loader
     del e_loader
@@ -164,13 +169,13 @@ def train_encoder():
     del e_data
 
     # Loading the best fit model
-    model.load(os.path.join('pts', 'encoder.pt'))
+    model.load(os.path.join('pts', 'encoder.pt' if not __mtl else 'encoder_mtl.pt'))
     data, loader     = makeDataSet(TEST_DATA_NAME, batch=int(params['batch_encoder']), shuffle=False, id_h='id', text_h='text', class_h='is_humor')
     t_data, t_loader = makeDataSet(TRAIN_DATA_NAME,batch=int(params['batch_encoder']), shuffle=False, id_h='id', text_h='text', class_h='is_humor')
     e_data, e_loader = makeDataSet(EVAL_DATA_NAME, batch=int(params['batch_encoder']), shuffle=False, id_h='id', text_h='text', class_h='is_humor')
 
     # Make predictions using only the encoder
-    evaluateModels(model, loader, name='pred_en', cleaner=[], header=('id', 'is_humor'))
+    evaluateModels(model, loader, name='pred_en', cleaner=[], header= ('id', 'is_humor') if not __mtl else ('id', 'is_humor', 'humor_rating'), mtl=__mtl)
     # Convert the data into vectors
     TRAIN_DATA_NAME = convert2EncoderVec('train_en', model, t_loader, save_as_numpy=True, df=DATA_FOLDER)
     EVAL_DATA_NAME  = convert2EncoderVec('dev_en',   model, e_loader, save_as_numpy=True, df=DATA_FOLDER)
