@@ -29,6 +29,13 @@ INV_TARGETING = {0:'', 1:'professions', 2:'substance use', 3:'sexual aggressors'
                  6:'social status', 7:'lgbt', 8:'technology', 9:'women', 10:'religion', 11:'body shaming', 12:'self-deprecating',
                  13:'men', 14:'age', 15:'ethnicity/origin'}
 
+def __calculateW(value):
+    we = [1./(value*value)] + [(value + 1) / (value*value)]*(value-1)
+    return we
+
+W_TARGETING = __calculateW(len(TARGETING))
+W_MECHANISM = __calculateW(len(MECHANISM))
+
 def setW(w:int):
     global WORKS
     WORKS = w
@@ -129,8 +136,8 @@ class Encoder_Model(nn.Module):
         self.criterion1 = nn.CrossEntropyLoss()
         if mtl:
             self.criterion2 = MaskedMSELoss()
-            self.criterion3 = nn.CrossEntropyLoss()
-            self.criterion4 = nn.BCEWithLogitsLoss()
+            self.criterion3 = nn.CrossEntropyLoss(weight=torch.Tensor(W_MECHANISM))
+            self.criterion4 = nn.BCEWithLogitsLoss(weight=torch.Tensor(W_TARGETING))
 
         self.max_length = max_length
         self.tok, self.bert = make_trans_pretrained_model()
