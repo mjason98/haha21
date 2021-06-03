@@ -174,7 +174,7 @@ class TorchBoard(object):
 		if getBest:
 			return yo
 
-	def show(self, saveroute, plot_smood=False):
+	def show(self, saveroute, plot_smood=False, pk_save=False, live=False):
 		'''
 			Save the plot
 
@@ -204,8 +204,24 @@ class TorchBoard(object):
 
 		fig.legend()
 		fig.savefig(saveroute)
+
+		if live:
+			fig.show()
+
 		del axes
 		del fig
+
+		if pk_save:
+			import pickle
+			file = open(saveroute+'.pk', 'wb')
+			pickle.dump(self, file)
+			file.close()
+	
+	def pkLoad(self, loadroute):
+		import pickle
+		file = open(loadroute, 'rb')
+		self = pickle.load(file)
+		file.close()
 
 def makeParameters(params, file):
 	with open(file, 'w') as F:

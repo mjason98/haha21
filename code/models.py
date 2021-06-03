@@ -343,8 +343,8 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                     total_acc += (y1 == y_hat.argmax(dim=-1).flatten()).sum().item()
                     if mtl:
                         total_mse += l2.item() * y2.shape[0]
-                        total_acc_2 += (y3 == y_mec.argmax(dim=-1).flatten()).sum().item()
-                        total_acc_3 += (y4 == ( y_tar > 0.5 )).sum().item()
+                        total_acc_2 += (y3.flatten() == y_mec.argmax(dim=-1).flatten()).sum().item()
+                        total_acc_3 += (y4.flatten() == ( torch.sigmoid(y_tar) > 0.5 ).flatten()).sum().item() / y_tar.shape[-1]
                 dl += y1.shape[0]
             bar.next(total_loss/dl)
         if use_acc:
@@ -402,8 +402,8 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                         total_acc += (y1 == y_hat.argmax(dim=-1)).sum().item()
                         if mtl:
                             total_mse += l1.item() * y2.shape[0]
-                            total_acc_2 += (y3 == y_mec.argmax(dim=-1).flatten()).sum().item()
-                            total_acc_3 += (y4 == ( y_tar > 0.5 )).sum().item()
+                            total_acc_2 += (y3.flatten() == y_mec.argmax(dim=-1).flatten()).sum().item()
+                            total_acc_3 += (y4.flatten() == ( torch.sigmoid(y_tar) > 0.5 ).flatten()).sum().item() / y_tar.shape[-1]
                     dl += y1.shape[0]
                     bar.next()
             if use_acc:
@@ -425,7 +425,7 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
         
         if res:
             model.save(os.path.join('pts', nameu+'.pt'))
-    board.show(os.path.join('out', nameu+'.png'), plot_smood=smood)
+    board.show(os.path.join('out', nameu+'.png'), plot_smood=smood, pk_save=True)
 
 def convertToTargeting(np_bools):
     sol = []
@@ -450,7 +450,7 @@ def evaluateModels(model, testData_loader, header=('id', 'is_humor', 'humor_rati
                 y_hat, y_val, y_mec, y_tar = model(data['x'])
                 y_hat, y_val = y_hat.to(device=cpu0), y_val.to(device=cpu0)
                 y_mec = y_mec.to(device=cpu0)
-                y_mec, y_tar = y_mec.argmax(dim=-1).to(device=cpu0), (y_tar > 0.5).to(device=cpu0)
+                y_mec, y_tar = y_mec.argmax(dim=-1).to(device=cpu0), (torch.sigmoid(y_tar) > 0.5).to(device=cpu0)
             else: 
                 y_hat = model(data['x'])
                 y_hat = y_hat.to(device=cpu0)
