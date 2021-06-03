@@ -32,7 +32,7 @@ params = {
     'vcolumn':'vecs', 
     'seq_len':64,
     'encoder_mtl': False,
-    'encoder_etha':'0.1-0.9',
+    'encoder_etha':'0.1-0.1-0.1-0.7',
     
     # Deep Reinforcement Learning Parameters ---------------
     'max_prototypes':52,
@@ -174,7 +174,7 @@ def train_encoder():
     e_data, e_loader = makeDataSet(EVAL_DATA_NAME, batch=int(params['batch_encoder']), shuffle=False, id_h='id', text_h='text', class_h='is_humor')
 
     # Make predictions using only the encoder
-    evaluateModels(model, loader, name='pred_en', cleaner=[], header= ('id', 'is_humor') if not __mtl else ('id', 'is_humor', 'humor_rating'), mtl=__mtl)
+    evaluateModels(model, loader, name='pred_en', cleaner=[], header= ('id', 'is_humor') if not __mtl else ('id', 'is_humor', 'humor_rating', 'humor_mechanism', 'humor_target'), mtl=__mtl)
     # Convert the data into vectors
     TRAIN_DATA_NAME = convert2EncoderVec('train_en', model, t_loader, save_as_numpy=True, df=DATA_FOLDER)
     EVAL_DATA_NAME  = convert2EncoderVec('dev_en',   model, e_loader, save_as_numpy=True, df=DATA_FOLDER)

@@ -17,6 +17,18 @@ TRANS_NAME     = ""
 FIXED_REP_SIZE = 90
 WORKS = 4
 
+MECHANISM = {'nan':0, 'wordplay':1, 'irony':2, 'absurd':3, 'embarrassment':4, 'stereotype':5,
+             'unmasking':6, 'exaggeration':7, 'reference':8, 'misunderstanding':9, 'insults':10, 'parody':11, 'analogy':12}
+INV_MECHANISM = {0:'', 1:'wordplay', 2:'irony', 3:'absurd', 4:'embarrassment', 5:'stereotype',
+                 6:'unmasking', 7:'exaggeration', 8:'reference', 9:'misunderstanding', 10:'insults', 11:'parody', 12:'analogy'}
+
+TARGETING = {'nan':0, 'professions':1, 'substance_use':2, 'sexual_aggressors':3, 'health':4, 'family/relationships':5,
+             'social_status':6, 'lgbt':7, 'technology':8, 'women':9, 'religion':10, 'body_shaming':11, 'self-deprecating':12,
+             'men':13, 'age':14, 'ethnicity/origin':15}
+INV_TARGETING = {0:'', 1:'professions', 2:'substance use', 3:'sexual aggressors', 4:'health', 5:'family/relationships',
+                 6:'social status', 7:'lgbt', 8:'technology', 9:'women', 10:'religion', 11:'body shaming', 12:'self-deprecating',
+                 13:'men', 14:'age', 15:'ethnicity/origin'}
+
 def setW(w:int):
     global WORKS
     WORKS = w
@@ -88,6 +100,8 @@ class Encod_Last_Layers(nn.Module):
         if mtl:
             self.mtl = True
             self.Task2 = nn.Linear(self.mid_size, 1)
+            self.Task3 = nn.Linear(self.mid_size, len(MECHANISM))
+            self.Task4 = nn.Linear(self.mid_size, len(TARGETING))
 
     def forward(self, X, ret_vec=False):
         y_hat = self.Dense1(X)
@@ -97,7 +111,9 @@ class Encod_Last_Layers(nn.Module):
 
         if self.mtl:
             y2 = self.Task2(y_hat).squeeze()
-            return y1, y2
+            y3 = self.Task3(y_hat).squeeze()
+            y4 = self.Task4(y_hat).squeeze()
+            return y1, y2, y3, y4
         return y1
 
     def load(self, path):
@@ -111,7 +127,10 @@ class Encoder_Model(nn.Module):
     def __init__(self, hidden_size, vec_size=768, dropout=0.1, max_length=120, selection='first', mtl=False):
         super(Encoder_Model, self).__init__()
         self.criterion1 = nn.CrossEntropyLoss()
-        self.criterion2 = MaskedMSELoss()
+        if mtl:
+            self.criterion2 = MaskedMSELoss()
+            self.criterion3 = nn.CrossEntropyLoss()
+            self.criterion4 = nn.BCEWithLogitsLoss()
 
         self.max_length = max_length
         self.tok, self.bert = make_trans_pretrained_model()
@@ -253,6 +272,8 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
         etha = [ float(v) for v in etha.split('-')]
         if abs(sum(etha) - 1.0) > 1e-9:
             raise ValueError('etha parameter most add up 1.0, but sums {} istead'.format(sum(etha)))
+        if len(etha) != 4:
+            raise ValueError('etha parameter most be a sequence of length 4 of float numbers separated by \'-\', ej: \'0.2-0.3-0.5\'')
         bett = max(etha)
 
         if bett == etha[0]:
@@ -260,6 +281,13 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
         elif bett == etha[1]:
             bett = 'reg1'
             board.setFunct( min )
+            board.setBestDotName('test_mse')
+        elif bett == etha[2]:
+            bett = 'class2'
+            board.setBestDotName('test_acc2')
+        elif bett == etha[3]:
+            bett = 'class3'
+            board.setBestDotName('test_acc3')
         else:
             bett = 'none'
     
@@ -269,26 +297,33 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
         total_loss, total_acc, dl = 0., 0., 0
         if mtl:
             total_mse = 0.0
+            total_acc_2 = 0.0
+            total_acc_3 = 0.0
         for data in Data_loader:
             optim.zero_grad()
             
             # Multi-Task learning for now not
             if mtl:
-                y_hat, y_val = model(data['x'])
-                # y_val = y_val.float()
+                y_hat, y_val, y_mec, y_tar = model(data['x'])
 
                 y1 = data['y'].to(device=model.device).flatten()
                 y2 = data['v'].to(device=model.device).float().flatten()
+                y3 = data['m'].to(device=model.device)
+                y4 = data['t'].to(device=model.device)
                 # Tamano 1
                 try:
                     l1 = model.criterion1(y_hat, y1)
                     l2 = model.criterion2(y_val, y2, y1)
-                    loss = etha[0]*l1 + etha[1]*l2
+                    l3 = model.criterion3(y_mec, y3)
+                    l4 = model.criterion4(y_tar, y4)
+                    loss = etha[0]*l1 + etha[1]*l2 + etha[2]*l3 + etha[3]*l4
                 except:
                     y_hat = y_hat.view(1,-1)
                     l1 = model.criterion1(y_hat, y1)
                     l2 = model.criterion2(y_val, y2, y1)
-                    loss = etha[0]*l1 + etha[1]*l2
+                    l3 = model.criterion3(y_mec, y3)
+                    l4 = model.criterion4(y_tar, y4)
+                    loss = etha[0]*l1 + etha[1]*l2 + etha[2]*l3 + etha[3]*l4
             else:
                 y_hat = model(data['x'])
                 y1    = data['y'].to(device=model.device).flatten()
@@ -308,14 +343,22 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                     total_acc += (y1 == y_hat.argmax(dim=-1).flatten()).sum().item()
                     if mtl:
                         total_mse += l2.item() * y2.shape[0]
+                        total_acc_2 += (y3 == y_mec.argmax(dim=-1).flatten()).sum().item()
+                        total_acc_3 += (y4 == ( y_tar > 0.5 )).sum().item()
                 dl += y1.shape[0]
             bar.next(total_loss/dl)
         if use_acc:
             res = board.update('train', total_acc/dl, getBest=True)
             if mtl:
                 res2 = board.update('train_mse', total_mse/dl, getBest=True)
+                res3 = board.update('train_acc2', total_acc_2/dl, getBest=True)
+                res4 = board.update('train_acc3', total_acc_3/dl, getBest=True)
                 if bett == 'reg1':
                     res = res2
+                elif bett == 'class2':
+                    res = res3
+                elif bett == 'class3':
+                    res = res4
         else:
             res = board.update('train', total_loss/dl, getBest=True)
         
@@ -324,23 +367,31 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
             total_loss, total_acc, dl= 0,0,0
             if mtl:
                 total_mse = 0.0
+                total_acc_2 = 0.0
+                total_acc_3 = 0.0
             with torch.no_grad():
                 for data in evalData_loader:
                     if mtl:
-                        y_hat, y_val = model(data['x'])
+                        y_hat, y_val, y_mec, y_tar = model(data['x'])
                         # y_val.float
                         y1 = data['y'].to(device=model.device)
                         y2 = data['v'].to(device=model.device).float()
+                        y3 = data['m'].to(device=model.device)
+                        y4 = data['t'].to(device=model.device)
                         # Tamano 1
                         try:
                             l1 = model.criterion1(y_hat, y1)
                             l2 = model.criterion2(y_val, y2, y1)
-                            loss = etha[0]*l1 + etha[1]*l2
+                            l3 = model.criterion3(y_mec, y3)
+                            l4 = model.criterion4(y_tar, y4)
+                            loss = etha[0]*l1 + etha[1]*l2 + etha[2]*l3 + etha[3]*l4
                         except:
                             y_hat = y_hat.view(1,-1)
                             l1 = model.criterion1(y_hat, y1)
                             l2 = model.criterion2(y_val, y2, y1)
-                            loss = etha[0]*l1 + etha[1]*l2
+                            l3 = model.criterion3(y_mec, y3)
+                            l4 = model.criterion4(y_tar, y4)
+                            loss = etha[0]*l1 + etha[1]*l2 + etha[2]*l3 + etha[3]*l4
                     else:
                         y_hat = model(data['x'])
                         y1 = data['y'].to(device=model.device)
@@ -351,14 +402,22 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                         total_acc += (y1 == y_hat.argmax(dim=-1)).sum().item()
                         if mtl:
                             total_mse += l1.item() * y2.shape[0]
+                            total_acc_2 += (y3 == y_mec.argmax(dim=-1).flatten()).sum().item()
+                            total_acc_3 += (y4 == ( y_tar > 0.5 )).sum().item()
                     dl += y1.shape[0]
                     bar.next()
             if use_acc:
                 res = board.update('test', total_acc/dl, getBest=True)
                 if mtl:
                     res2 = board.update('test_mse', total_mse/dl, getBest=True)
+                    res3 = board.update('test_acc2', total_acc_2/dl, getBest=True)
+                    res4 = board.update('test_acc3', total_acc_3/dl, getBest=True)
                     if bett == 'reg1':
                         res = res2
+                    elif bett == 'class2':
+                        res = res3
+                    elif bett == 'class3':
+                        res = res4
             else:
                 res = board.update('test', total_loss/dl, getBest=True)
         bar.finish()
@@ -368,20 +427,30 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
             model.save(os.path.join('pts', nameu+'.pt'))
     board.show(os.path.join('out', nameu+'.png'), plot_smood=smood)
 
-def evaluateModels(model, testData_loader, header=('id', 'is_humor', 'humor_rating'), cleaner=[], name='pred', mtl=False):
+def convertToTargeting(np_bools):
+    sol = []
+    for i in range(np_bools.shape[0]):
+        if np_bools[i] == 1 and i > 0:
+            sol.append(INV_TARGETING[i])
+    sol = ';'.join(sol)
+    return sol
+
+def evaluateModels(model, testData_loader, header=('id', 'is_humor', 'humor_rating', 'humor_mechanism', 'humor_target'), cleaner=[], name='pred', mtl=False):
     model.eval()
     
     pred_path = os.path.join('out', name+'.csv')
 
     bar = MyBar('test', max=len(testData_loader))
-    Ids, lab, val = [], [], []
+    Ids, lab, val, mech, targ = [], [], [], [], []
     
     cpu0 = torch.device("cpu")
     with torch.no_grad():
         for data in testData_loader:
             if mtl:
-                y_hat, y_val = model(data['x'])
+                y_hat, y_val, y_mec, y_tar = model(data['x'])
                 y_hat, y_val = y_hat.to(device=cpu0), y_val.to(device=cpu0)
+                y_mec = y_mec.to(device=cpu0)
+                y_mec, y_tar = y_mec.argmax(dim=-1).to(device=cpu0), (y_tar > 0.5).to(device=cpu0)
             else: 
                 y_hat = model(data['x'])
                 y_hat = y_hat.to(device=cpu0)
@@ -394,14 +463,18 @@ def evaluateModels(model, testData_loader, header=('id', 'is_humor', 'humor_rati
                 lab.append(y_hat[i].item())
                 if mtl:
                     val.append(y_val[i].item())
+                    mech.append(INV_MECHANISM[ y_mec[i].item() ])
+                    targ.append(convertToTargeting(y_tar[i].numpy()))
             bar.next()
     bar.finish()
     
     Ids, lab = pd.Series(Ids), pd.Series(lab)
     if mtl:
-        val = pd.Series(val)
-        data = pd.concat([Ids, lab, val], axis=1)
+        val, mech, targ = pd.Series(val), pd.Series(mech), pd.Series(targ)
+        data = pd.concat([Ids, lab, val, mech, targ], axis=1)
         del val
+        del mech
+        del targ
     else:
         data = pd.concat([Ids, lab], axis=1)
         del Ids
@@ -441,8 +514,24 @@ class RawDataset(Dataset):
             regv  = self.data_frame.loc[idx, 'humor_rating'] if int(y1) != 0 else 0.
         except:
             y1, regv = 0, 0.
+        
+        try:
+            mechu  = self.data_frame.loc[idx, 'humor_mechanism']
+            if type(mechu) is not str: mechu = 'nan'
+            mechu  = int(MECHANISM[mechu])
+        except:
+            mechu = 0
+        
+        try:
+            taru  = self.data_frame.loc[idx, 'humor_target']
+            if type(taru) is not str: taru = 'nan'
+        except:
+            taru = ''
+        taru = taru.replace('y s', 'y_s').replace('l a', 'l_a').replace('l s', 'l_s').replace('e u', 'e_u').replace(' ', '').split(';')
+        taru = [ 1 if _t_ in taru else 0  for _t_ in TARGETING ]
+        taru = torch.Tensor(taru)
 
-        sample = {'x': sent, 'y': y1, 'id':ids, 'v':regv}
+        sample = {'x': sent, 'y': y1, 'id':ids, 'v':regv, 'm':mechu, 't':taru}
         return sample
 
 class VecDataset(Dataset):
@@ -469,7 +558,23 @@ class VecDataset(Dataset):
         except:
             y1, regv = 0, 0.
         
-        sample = {'x': sent, 'y': y1, 'id':ids, 'v':regv}
+        try:
+            mechu  = self.data_frame.loc[idx, 'humor_mechanism']
+            if type(mechu) is not str: mechu = 'nan'
+            mechu  = int(MECHANISM[mechu])
+        except:
+            mechu = 0
+        
+        try:
+            taru  = self.data_frame.loc[idx, 'humor_target']
+            if type(taru) is not str: taru = 'nan'
+        except:
+            taru = ''
+        taru = taru.replace('y s', 'y_s').replace('l a', 'l_a').replace('l s', 'l_s').replace('e u', 'e_u').replace(' ', '').split(';')
+        taru = [ 1 if _t_ in taru else 0  for _t_ in TARGETING ]
+        taru = torch.Tensor(taru)
+
+        sample = {'x': sent, 'y': y1, 'id':ids, 'v':regv, 'm':mechu, 't':taru}
         return sample
 
 class ProtoDataset(Dataset):
@@ -599,7 +704,7 @@ def makeTrain_and_ValData(data_path:str, percent=10, class_label=None, df='data'
 
 def convert2EncoderVec(data_name:str, model, loader, save_pickle=False, save_as_numpy=False, df='data'):
     model.eval()
-    IDs, YC, YV, X = [], [], [], []
+    IDs, YC, YV, X, ME, TR = [], [], [], [], [], []
 
     new_name = os.path.join('data', data_name+'.csv' if not save_pickle else data_name+'.pkl')
 
@@ -614,6 +719,15 @@ def convert2EncoderVec(data_name:str, model, loader, save_pickle=False, save_as_
                 y_c = data['y']
             except:
                 y_c = None
+            
+            try:
+                y_m = data['m']
+            except:
+                y_m = None
+            try:
+                y_t = data['t']
+            except:
+                y_t = None
             
             try:
                 y_v = data['v'].float()
@@ -634,6 +748,10 @@ def convert2EncoderVec(data_name:str, model, loader, save_pickle=False, save_as_
                     YV.append(y_v[i].item())
                 if ids is not None:
                     IDs.append(ids[i].item())
+                if y_m is not None:
+                    ME.append(INV_MECHANISM[int(y_c[i].item())])
+                if y_t is not None:
+                    TR.append(convertToTargeting(y_t[i].numpy()))
             bar.next()
     bar.finish()
 
@@ -661,6 +779,14 @@ def convert2EncoderVec(data_name:str, model, loader, save_pickle=False, save_as_
         conca.append(pd.Series(YV))
         n_head.append('humor_rating')
         del YV
+    if len(ME) > 0:
+        conca.append(pd.Series(ME))
+        n_head.append('humor_mechanism')
+        del ME
+    if len(TR) > 0:
+        conca.append(pd.Series(TR))
+        n_head.append('humor_target')
+        del TR
     conca.append(pd.Series(X))
     n_head.append('vecs')
     del X

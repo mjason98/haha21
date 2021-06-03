@@ -101,12 +101,19 @@ class TorchBoard(object):
 	'''
 	def __init__(self):
 		self.dict = {}
-		self.labels = ['train', 'test', 'train_mse', 'test_mse']
+		self.labels = ['train', 'test', 'train_mse', 'test_mse', 'train_acc2', 'test_acc2', 'train_acc3', 'test_acc3']
 		self.future_updt = True
 		self.best_funct = None
 		self.setFunct( max )
-		self.best   = [None, None, None, None]
-		self.best_p = [0, 0, 0, 0]
+		self.best     = [None, None, None, None, None, None, None, None]
+		self.best_p   = [0, 0, 0, 0, 0, 0, 0, 0]
+		self.bestDot  = 'test'
+	
+	def setBestDotName(self, name):
+		if name not in self.labels:
+			print ('WARNING Ignore operation of \'setBestDotName\', name', name , 'not in ', self.labels)
+			return 
+		self.bestDot = name
 
 	def setFunct(self, fun):
 		'''
@@ -141,6 +148,14 @@ class TorchBoard(object):
 			pk = 2
 		elif label == 'test_mse':
 			pk = 3
+		elif label == 'train_acc2':
+			pk = 4
+		elif label == 'test_acc2':
+			pk = 5
+		elif label == 'train_acc3':
+			pk = 6
+		elif label == 'test_acc3':
+			pk = 7
 
 		if self.dict.get(label) == None:
 			self.dict.update({label:[value]})
@@ -170,6 +185,9 @@ class TorchBoard(object):
 		'''
 		fig , axes = plt.subplots()
 		for i,l in enumerate(self.dict):
+			if self.best[i] is None:
+				continue
+			
 			y = self.dict[l]
 			if len(y) <= 1:
 				continue
@@ -177,8 +195,8 @@ class TorchBoard(object):
 			if len(lab) > 7:
 				lab = lab[:7]
 			axes.plot(range(len(y)), y, label=l + ' ' + lab)
-			axes.scatter([self.best_p[i]], [self.best[i]])
-
+			if l == self.bestDot:
+				axes.scatter([self.best_p[i]], [self.best[i]])
 			if plot_smood:
 				w = 3
 				y_hat = [ np.array(y[max(i-w,0):min(len(y),i+w)]).mean() for i in range(len(y))]
