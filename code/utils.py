@@ -141,21 +141,11 @@ class TorchBoard(object):
 				label, self.labels))
 			self.future_updt = False
 			return
-		pk = 1
-		if label == 'train':
-			pk = 0
-		elif label == 'train_mse':
-			pk = 2
-		elif label == 'test_mse':
-			pk = 3
-		elif label == 'train_acc2':
-			pk = 4
-		elif label == 'test_acc2':
-			pk = 5
-		elif label == 'train_acc3':
-			pk = 6
-		elif label == 'test_acc3':
-			pk = 7
+		pk = -1
+		for i in range(len(self.labels)):
+			if self.labels[i] == label:
+				pk = i
+				break
 
 		if self.dict.get(label) == None:
 			self.dict.update({label:[value]})
@@ -206,7 +196,7 @@ class TorchBoard(object):
 		fig.savefig(saveroute)
 
 		if live:
-			fig.show()
+			plt.show()
 
 		del axes
 		del fig
@@ -220,8 +210,17 @@ class TorchBoard(object):
 	def pkLoad(self, loadroute):
 		import pickle
 		file = open(loadroute, 'rb')
-		self = pickle.load(file)
+		temporal = pickle.load(file)
 		file.close()
+
+		self.dict = temporal.dict
+		self.future_updt = temporal.future_updt
+		self.best_funct = temporal.best_funct
+		self.best     = temporal.best
+		self.best_p   = temporal.best_p
+		self.bestDot  = temporal.bestDot
+
+		del temporal
 
 def makeParameters(params, file):
 	with open(file, 'w') as F:

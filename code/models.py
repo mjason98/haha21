@@ -302,7 +302,6 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
         for data in Data_loader:
             optim.zero_grad()
             
-            # Multi-Task learning for now not
             if mtl:
                 y_hat, y_val, y_mec, y_tar = model(data['x'])
 
@@ -343,7 +342,7 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                     total_acc += (y1 == y_hat.argmax(dim=-1).flatten()).sum().item()
                     if mtl:
                         total_mse += l2.item() * y2.shape[0]
-                        total_acc_2 += (y3.flatten() == y_mec.argmax(dim=-1).flatten()).sum().item()
+                        total_acc_2 += (y3 == y_mec.argmax(dim=-1).flatten()).sum().item()
                         total_acc_3 += (y4.flatten() == ( torch.sigmoid(y_tar) > 0.5 ).flatten()).sum().item() / y_tar.shape[-1]
                 dl += y1.shape[0]
             bar.next(total_loss/dl)
@@ -402,7 +401,7 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                         total_acc += (y1 == y_hat.argmax(dim=-1)).sum().item()
                         if mtl:
                             total_mse += l1.item() * y2.shape[0]
-                            total_acc_2 += (y3.flatten() == y_mec.argmax(dim=-1).flatten()).sum().item()
+                            total_acc_2 += (y3 == y_mec.argmax(dim=-1).flatten()).sum().item()
                             total_acc_3 += (y4.flatten() == ( torch.sigmoid(y_tar) > 0.5 ).flatten()).sum().item() / y_tar.shape[-1]
                     dl += y1.shape[0]
                     bar.next()
