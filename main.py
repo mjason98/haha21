@@ -1,8 +1,8 @@
 import os, sys, argparse
 from code.models import setTransName, setSeed, makeDataSet, makeModels
 from code.models import trainModels, evaluateModels, makeTrain_and_ValData
-from code.models import convert2EncoderVec, predictWithPairModel
-from code.models import makeDataSet_Prt, setFsize, setW
+from code.models import convert2EncoderVec, predictWithPairModel, predictWithPlainModel
+from code.models import makeDataSet_Prt, setFsize, setW, makeDataSet_Vec
 from code.utils  import projectData2D, makeParameters, parceParameter
 from code.protos import extractPrototypes
 
@@ -63,6 +63,11 @@ params = {
     'siam_epochs': 50,
     'siam_hsize':64,
     'siam_dpr':0.05,
+    #---------- Sage data -------------------------------------
+    'zepochs': 50,
+    'zbatch': 64,
+    'zhsize':64,
+    'zlr':0.000001,
     #---GENERAL -----------------------------------------------
     'num_workers':4
 }
@@ -188,8 +193,22 @@ def train_encoder():
     del data 
     del model
 
+def trainReg(trainD, evalD, testD):
+    _, t_loader = makeDataSet_Vec(trainD, int(params['zbatch']), text_h='vecs')
+    _, e_loader = makeDataSet_Vec(evalD,  int(params['zbatch']), text_h='vecs')
+    
+    model = makeModels('zmodel', int(params['zhsize']), int(params['max_prototypes']))
+    trainModels(model, t_loader, epochs=int(params['zepochs']), evalData_loader=e_loader,  
+                nameu='zmodel', lr=float(params['zlr']), use_acc=False, b_fun=min, use_reg=True)
+    del t_loader
+    del e_loader
+
+    model.load(os.path.join('pts', 'zmodel.pt'))
+    predictWithPlainModel(testD, model, int(params['zbatch']))
+    del model
+
 def trainSiam():
-    print ('# Start: Trianing Siamese Model')
+    print ('# Start: Training Siamese Model')
     # temporal code, delete later ---------
     TRAIN_DATA_NAME = 'data/train_en.csv'
     EVAL_DATA_NAME  = 'data/dev_en.csv'
@@ -197,19 +216,27 @@ def trainSiam():
     # temporal code, delete later ---------
 
     # Siam data
-    _, t_loader = makeDataSet_Prt(TRAIN_DATA_NAME, batch=params['siam_batch'], id_h='id', text_h='vecs', class_h='is_humor', criterion='random')
-    _, e_loader = makeDataSet_Prt(EVAL_DATA_NAME, batch=params['siam_batch'], id_h='id', text_h='vecs', class_h='is_humor', criterion='random')
+    _, t_loader = makeDataSet_Prt(TRAIN_DATA_NAME, batch=int(params['siam_batch']), id_h='id', text_h='vecs', class_h='is_humor', criterion='random')
+    _, e_loader = makeDataSet_Prt(EVAL_DATA_NAME, batch=int(params['siam_batch']), id_h='id', text_h='vecs', class_h='is_humor', criterion='random')
 
-    model = makeModels('siam', int(params['siam_hsize']), int(params['d_model']), dropout=float(params['siam_dpr']))
-    trainModels(model, t_loader, epochs=int(params['siam_epochs']), evalData_loader=e_loader,  
-                nameu='siam', lr=float(params['siam_lr']), use_acc=False, b_fun=min)
+    model = makeModels('siam', int(params['siam_hsize']), _tr_vec_size=int(params['d_model']), dropout=float(params['siam_dpr']))
+    # trainModels(model, t_loader, epochs=int(params['siam_epochs']), evalData_loader=e_loader,  
+                # nameu='siam', lr=float(params['siam_lr']), use_acc=False, b_fun=min)
     
     del t_loader
     del e_loader
 
     model.load(os.path.join('pts', 'siam.pt'))
-    predictWithPairModel(TEST_DATA_NAME, model=model, out_name='pred_siam.csv')
+    # predictWithPairModel(TEST_DATA_NAME, model=model, out_name='pred_siam.csv')
+    
+    # temporal 
+    # predictWithPairModel(EVAL_DATA_NAME, model=model, out_name='pred_siamEval.csv')
+
+    a,b,c = (predictWithPairModel(TRAIN_DATA_NAME, model=model, save_z=True, out_name='Z'+os.path.basename(TRAIN_DATA_NAME)),
+            predictWithPairModel (EVAL_DATA_NAME,  model=model, save_z=True, out_name='Z'+os.path.basename(EVAL_DATA_NAME)),
+            predictWithPairModel (TEST_DATA_NAME,  model=model, save_z=True, out_name='Z'+os.path.basename(TEST_DATA_NAME)))
     del model
+    trainReg(a,b,c)
 
 if __name__ == '__main__':
     if check_params(arg=sys.argv[1:]) == 0:
@@ -236,9 +263,14 @@ if __name__ == '__main__':
         
     if TRAIN_CENTERS:
         params.update({'data_path':TRAIN_DATA_NAME, 'eval_data_path':EVAL_DATA_NAME})
-        extractPrototypes(method='dql', params=params)
-        # projectData2D(os.path.join(DATA_FOLDER, 'train_en.csv'), use_centers=True, drops=['id', 'is_humor'])
+        # extractPrototypes(method='dql', params=params)
+        projectData2D(os.path.join(DATA_FOLDER, 'train_en.csv'), use_centers=True, drops=['id', 'is_humor'])
         predictWithPairModel(TEST_DATA_NAME)
+        
+        # trainReg(
+        # predictWithPairModel(TRAIN_DATA_NAME,save_z=True, out_name='Z'+os.path.basename(TRAIN_DATA_NAME)),
+        # predictWithPairModel(EVAL_DATA_NAME, save_z=True, out_name='Z'+os.path.basename(EVAL_DATA_NAME)),
+        # predictWithPairModel(TEST_DATA_NAME, save_z=True, out_name='Z'+os.path.basename(TEST_DATA_NAME)))
     
     if TRAIN_CMP:
         trainSiam()

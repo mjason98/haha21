@@ -109,6 +109,8 @@ class Encod_Last_Layers(nn.Module):
             self.Task2 = nn.Linear(self.mid_size, 1)
             self.Task3 = nn.Linear(self.mid_size, len(MECHANISM))
             self.Task4 = nn.Linear(self.mid_size, len(TARGETING))
+        else:
+            self.mtl = False
 
     def forward(self, X, ret_vec=False):
         y_hat = self.Dense1(X)
@@ -250,6 +252,35 @@ class Siam_Model(nn.Module):
     def save(self, path):
         torch.save(self.state_dict(), path) 
 
+class ZMSELoss(torch.nn.Module):
+    def __init__(self):
+        super(ZMSELoss, self).__init__()
+        self.mse = nn.MSELoss()
+
+    def forward(self, y_hat, y):
+        y_loss = self.mse(y_hat, y.float())
+        return y_loss
+
+class Zmodel(nn.Module):
+    def __init__(self, in_size, hidden_size):
+        super(Zmodel, self).__init__()
+        self.Dense1 = nn.Sequential( nn.BatchNorm1d(in_size), nn.Linear(in_size, hidden_size), nn.Tanh())
+        self.Dense2 = nn.Sequential( nn.Linear(hidden_size, 1), nn.ReLU() )
+        self.criterion1 = ZMSELoss() # MaskedMSELoss()
+        
+        self.device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+        self.to(device=self.device)
+    def forward(self, X):
+        x_ = self.Dense1(X)
+        y_ = x_ + torch.randn(x_.shape) * 2
+        y_ = self.Dense2(y_)
+        return y_.view(-1)
+
+    def load(self, path):
+        self.load_state_dict(torch.load(path, map_location=self.device))
+    def save(self, path):
+        torch.save(self.state_dict(), path) 
+
 
 # The model's maker
 def makeModels(name:str, hidden_size, _tr_vec_size=768, dropout=0.0, max_length=120, selection='first'):
@@ -261,10 +292,12 @@ def makeModels(name:str, hidden_size, _tr_vec_size=768, dropout=0.0, max_length=
         return Siam_Model(_tr_vec_size, hidden_size, dropout=dropout)
     elif name == 'encoder_mtl':
         return Encoder_Model(hidden_size, _tr_vec_size, dropout=dropout, max_length=max_length, selection=selection, mtl=True)
+    elif name == 'zmodel':
+        return Zmodel(_tr_vec_size, hidden_size)
     else:
-        raise ValueError('# The models name {} is invalid, instead use one of this: [encoder, siam, euclid-distance]'.format(headerizar(name)))
+        raise ValueError('# The models name {} is invalid, instead use one of this: [encoder, siam, euclid-distance, encoder_mtl, zmodel]'.format(headerizar(name)))
 
-def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, etha='1', nameu='encoder', optim=None, b_fun=None, smood=False, mtl=False, use_acc=True):
+def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, etha='1', nameu='encoder', optim=None, b_fun=None, smood=False, mtl=False, use_acc=True, use_reg=False):
     if epochs <= 0:
         return
     if optim is None:
@@ -332,7 +365,7 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                     loss = etha[0]*l1 + etha[1]*l2 + etha[2]*l3 + etha[3]*l4
             else:
                 y_hat = model(data['x'])
-                y1    = data['y'].to(device=model.device).flatten()
+                y1    = data['y'].to(device=model.device).flatten() if not use_reg else data['v'].to(device=model.device).flatten()
                 try:
                     loss = model.criterion1(y_hat, y1)
                 except:
@@ -400,7 +433,7 @@ def trainModels(model, Data_loader, epochs:int, evalData_loader=None, lr=0.1, et
                             loss = etha[0]*l1 + etha[1]*l2 + etha[2]*l3 + etha[3]*l4
                     else:
                         y_hat = model(data['x'])
-                        y1 = data['y'].to(device=model.device)
+                        y1    = data['y'].to(device=model.device).flatten() if not use_reg else data['v'].to(device=model.device).flatten()
                         loss = model.criterion1(y_hat, y1)
                     
                     total_loss += loss.item() * y1.shape[0]
@@ -560,7 +593,7 @@ class VecDataset(Dataset):
         
         try:
             y1 = self.data_frame.loc[idx, self.y1_name]
-            regv  = self.data_frame.loc[idx, 'humor_rating'] if int(y1) != 0 else 0.
+            regv  = float(self.data_frame.loc[idx, 'humor_rating']) if int(y1) != 0 else 0.
         except:
             y1, regv = 0, 0.
         
@@ -588,7 +621,7 @@ class ProtoDataset(Dataset):
         self.data_frame = pd.read_csv(csv_file)
         self.pos_p = pos_p 
         self.neg_p = neg_p
-        self.__M_pos, self.__M_neg = min(2, pos_p.shape[0]),min(3, neg_p.shape[0])
+        self.__M_pos, self.__M_neg = min(2, pos_p.shape[0]),min(3, neg_p.shape[0]) #23
 
         if criterion not in ['random', 'all', 'id']:
             raise ValueError("Criterion parameter: {} not in [\'{}\']".format(criterion, '\',\''.join(['random', 'all', 'id'])))
@@ -755,7 +788,7 @@ def convert2EncoderVec(data_name:str, model, loader, save_pickle=False, save_as_
                 if ids is not None:
                     IDs.append(ids[i].item())
                 if y_m is not None:
-                    ME.append(INV_MECHANISM[int(y_c[i].item())])
+                    ME.append(INV_MECHANISM[int(y_m[i].item())])
                 if y_t is not None:
                     TR.append(convertToTargeting(y_t[i].numpy()))
             bar.next()
@@ -804,7 +837,7 @@ def convert2EncoderVec(data_name:str, model, loader, save_pickle=False, save_as_
         data.to_csv(new_name, index=None, header=n_head)
     return new_name
 
-def predictWithPairModel(data_csv, model=None, batch=16, id_vec='vecs', id_h='is_humor', id_id='id', out_name='pred_manual.csv', drops=['vecs']):
+def predictWithPairModel(data_csv, model=None, batch=16, id_vec='vecs', id_h='is_humor', id_id='id', out_name='pred_manual.csv', drops=['vecs'], save_z=False):
     ''' predict unlabeled data\n
         model most asept a tensor of (batch, 2*vec_size ) and output the pairwise distance in a 
         output of (batch, 1)\n\n
@@ -813,12 +846,12 @@ def predictWithPairModel(data_csv, model=None, batch=16, id_vec='vecs', id_h='is
     if model is None:
         model = DistanceModel(d=F.pairwise_distance)
 
-    out_name = os.path.join('out', out_name)
+    out_name = os.path.join('out' if not save_z else 'data', out_name)
     data, loader = makeDataSet_Prt(data_csv, batch=batch, shuffle=False, id_h=id_id, text_h=id_vec, class_h=id_h, criterion='all')
     model.eval()
 
     pos_size, _, _ = data.getProtoPairSize()
-    new_label, bar = [], MyBar('eval', max=len(loader))
+    new_label, bar = [], MyBar('eval' if not save_z else 'make Z', max=len(loader))
     
     cpu0 = torch.device("cpu")
     curr_ba = 0
@@ -831,18 +864,74 @@ def predictWithPairModel(data_csv, model=None, batch=16, id_vec='vecs', id_h='is
             y_hat = model(x).to(device=cpu0)
 
             y_hat = y_hat.view(curr_ba, -1)
-            y_hat = y_hat.argmin(dim=1)
-            y_hat = (y_hat < pos_size).flatten().int()
-            new_label.append(y_hat.numpy())    
+
+            if save_z:
+                for i in range(y_hat.shape[0]):
+                    new_label.append(' '.join([str(v) for v in y_hat[i].tolist() ]))
+            else:
+                y_hat = y_hat.argmin(dim=1)
+                y_hat = (y_hat < pos_size).flatten().int()
+                new_label.append(y_hat.numpy())    
             bar.next()
         bar.finish()
-    new_label = np.concatenate(new_label, axis=0)
+    if not save_z:
+        new_label = np.concatenate(new_label, axis=0)
     new_label_S = pd.Series(new_label)
     del data 
     del loader 
     del new_label
 
     data = pd.read_csv(data_csv).drop(drops, axis=1)
+    if not save_z:
+        try:
+            data.drop([id_h], axis=1, inplace=True)
+        except:
+            print ('# Making', id_h, 'label to save predictions.')
+        data_H = list(data.columns) + [id_h]
+    else:
+        # data.drop(['vecs'], axis=1, inplace=True)
+        data_H = list(data.columns) + ['vecs']
+
+    data = pd.concat([data, new_label_S], axis=1)
+    data.to_csv(out_name, index=None, header=data_H)
+    print ('#', 'New predicted' if not save_z else 'Z', 'data saved in', colorizar(out_name))
+    del data 
+    del data_H
+
+    if save_z:
+        return out_name
+
+def predictWithPlainModel(data_csv, model, batch=16, id_h='humor_rating', id_vec='vecs', id_id='id', out_name='Zpred.csv', drops=['vecs']):
+    ''' predict unlabeled data\n
+        model most asept a tensor of (batch, vec_size ) and output a float value in a output of (batch, 1)\n\n
+    '''
+
+    out_name = os.path.join('out', out_name)
+    _, loader = makeDataSet_Vec(data_csv, batch=batch, shuffle=False, text_h='vecs')
+    model.eval()
+
+    new_label, bar = [], MyBar('Zeval', max=len(loader))
+    
+    cpu0 = torch.device("cpu")
+    with torch.no_grad():
+        for d in loader:
+            x = d['x'].to(device=cpu0)
+            y_hat = model(x).to(device=cpu0).squeeze()
+            new_label.append(y_hat.numpy())    
+            bar.next()
+        bar.finish()
+
+    new_label = np.concatenate(new_label, axis=0)
+    new_label_S = pd.Series(new_label)
+
+    del loader 
+    del new_label
+
+    data = pd.read_csv(data_csv).drop(drops, axis=1)
+    try:
+        data.drop([id_h], axis=1, inplace=True)
+    except:
+        print ('# Making', id_h, 'label to save predictions.')
     data_H = list(data.columns) + [id_h]
 
     data = pd.concat([data, new_label_S], axis=1)
