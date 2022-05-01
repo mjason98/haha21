@@ -263,7 +263,7 @@ if __name__ == '__main__':
         
     if TRAIN_CENTERS:
         params.update({'data_path':TRAIN_DATA_NAME, 'eval_data_path':EVAL_DATA_NAME})
-        # extractPrototypes(method='dql', params=params)
+        extractPrototypes(method='dql', params=params)
         projectData2D(os.path.join(DATA_FOLDER, 'train_en.csv'), use_centers=True, drops=['id', 'is_humor'])
         predictWithPairModel(TEST_DATA_NAME)
         

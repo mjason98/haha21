@@ -698,7 +698,7 @@ def makeDataSet_Prt(csv_path:str, batch, shuffle=True, id_h='id', text_h='text',
 
 #================= TEMPORAL FUNCTIONS ===============================
 
-def makeTrain_and_ValData(data_path:str, percent=10, class_label=None, df='data'):
+def makeTrain_and_ValData(data_path:str, percent=10, class_label=None, df='data', sentence_label='text'):
     '''
         class_lable: str The label to split, the humor column with values ['0', '1']
     '''
@@ -709,7 +709,7 @@ def makeTrain_and_ValData(data_path:str, percent=10, class_label=None, df='data'
         return train_path, eval_path	
 
     data = pd.read_csv(data_path)	
-    mean = [len(data.loc[i, 'text'].split()) for i in range(len(data))]
+    mean = [len(data.loc[i, sentence_label].split()) for i in range(len(data))]
     var  = [i*i for i in mean]
     mean, var = sum(mean)/len(mean), sum(var)/len(mean)
     var = (var - mean) ** 0.5
