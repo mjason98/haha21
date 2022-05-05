@@ -220,23 +220,23 @@ def trainSiam():
     _, e_loader = makeDataSet_Prt(EVAL_DATA_NAME, batch=int(params['siam_batch']), id_h='id', text_h='vecs', class_h='is_humor', criterion='random')
 
     model = makeModels('siam', int(params['siam_hsize']), _tr_vec_size=int(params['d_model']), dropout=float(params['siam_dpr']))
-    # trainModels(model, t_loader, epochs=int(params['siam_epochs']), evalData_loader=e_loader,  
-                # nameu='siam', lr=float(params['siam_lr']), use_acc=False, b_fun=min)
+    trainModels(model, t_loader, epochs=int(params['siam_epochs']), evalData_loader=e_loader,  
+                nameu='siam', lr=float(params['siam_lr']), use_acc=False, b_fun=min)
     
     del t_loader
     del e_loader
 
     model.load(os.path.join('pts', 'siam.pt'))
-    # predictWithPairModel(TEST_DATA_NAME, model=model, out_name='pred_siam.csv')
+    predictWithPairModel(TEST_DATA_NAME, model=model, out_name='pred_siam.csv')
     
     # temporal 
     # predictWithPairModel(EVAL_DATA_NAME, model=model, out_name='pred_siamEval.csv')
 
-    a,b,c = (predictWithPairModel(TRAIN_DATA_NAME, model=model, save_z=True, out_name='Z'+os.path.basename(TRAIN_DATA_NAME)),
-            predictWithPairModel (EVAL_DATA_NAME,  model=model, save_z=True, out_name='Z'+os.path.basename(EVAL_DATA_NAME)),
-            predictWithPairModel (TEST_DATA_NAME,  model=model, save_z=True, out_name='Z'+os.path.basename(TEST_DATA_NAME)))
+    # a,b,c = (predictWithPairModel(TRAIN_DATA_NAME, model=model, save_z=True, out_name='Z'+os.path.basename(TRAIN_DATA_NAME)),
+    #         predictWithPairModel (EVAL_DATA_NAME,  model=model, save_z=True, out_name='Z'+os.path.basename(EVAL_DATA_NAME)),
+    #         predictWithPairModel (TEST_DATA_NAME,  model=model, save_z=True, out_name='Z'+os.path.basename(TEST_DATA_NAME)))
     del model
-    trainReg(a,b,c)
+    # trainReg(a,b,c)
 
 if __name__ == '__main__':
     if check_params(arg=sys.argv[1:]) == 0:
@@ -264,7 +264,7 @@ if __name__ == '__main__':
     if TRAIN_CENTERS:
         params.update({'data_path':TRAIN_DATA_NAME, 'eval_data_path':EVAL_DATA_NAME})
         extractPrototypes(method='dql', params=params)
-        projectData2D(os.path.join(DATA_FOLDER, 'train_en.csv'), use_centers=True, drops=['id', 'is_humor'])
+        projectData2D(os.path.join(DATA_FOLDER, 'train_en.csv'), use_centers=True, drops=['id', 'is_humor', 'source'])
         predictWithPairModel(TEST_DATA_NAME)
         
         # trainReg(

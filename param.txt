@@ -1,0 +1,4 @@
+ICM:False
+epochs:1000
+max_prototypes:54
+d_model:32
