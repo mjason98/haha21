@@ -32,14 +32,16 @@ def transformData(dataPath, newName, hri=False):
     data = pd.read_csv(dataPath)
     
     ids = data['index'].map(lambda p: p.replace('tweet', ''))
+    ground = data['ground_humor']
     data.drop(['index'], axis=1, inplace=True)
     
     newColumns = ','.join(data.columns)
     newColumns = newColumns.replace('index', 'id').replace('encoding', 'vecs').replace('ground_humor', 'is_humor').split(',')
-    newColumns = ['id'] + newColumns 
+    newColumns = ['id', 'ground_humor'] + newColumns 
     
-    data = pd.concat([ids, data], axis=1)
+    data = pd.concat([ids, ground, data], axis=1)
     del ids
+    del ground
 
     if hri:
         newColumns = newColumns + ['humor_rating']
