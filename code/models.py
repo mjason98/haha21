@@ -3,6 +3,7 @@ import numpy as np
 import os
 import random
 import math
+import re
 
 import torch
 import torch.nn.functional as F
@@ -537,6 +538,7 @@ class RawDataset(Dataset):
         self.x_name  = text_h
         self.id_name = id_h
         self.y1_name = class_h
+        self.reg = re.compile("[^0-9]*")
 
     def __len__(self):
         return len(self.data_frame)
@@ -545,7 +547,7 @@ class RawDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        ids  = int(str(self.data_frame.loc[idx, self.id_name]).replace('tweet', ''))
+        ids = int(self.reg.sub("", "0" + str(self.data_frame.loc[idx, self.id_name])))
         sent = self.data_frame.loc[idx, self.x_name]
         
         try:
@@ -579,6 +581,7 @@ class VecDataset(Dataset):
         self.x_name  = text_h
         self.id_name = id_h
         self.y1_name = class_h
+        self.reg = re.compile("[^0-9]*")
 
     def __len__(self):
         return len(self.data_frame)
@@ -587,7 +590,7 @@ class VecDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        ids  = int(str(self.data_frame.loc[idx, self.id_name]).replace('tweet', ''))
+        ids = int(self.reg.sub("", "0" + str(self.data_frame.loc[idx, self.id_name])))
         sent  = self.data_frame.loc[idx, self.x_name]
         sent = torch.Tensor([float(s) for s in sent.split()]).float()
         
@@ -630,6 +633,7 @@ class ProtoDataset(Dataset):
         self.x_name  = text_h
         self.id_name = id_h
         self.y1_name = class_h
+        self.reg = re.compile("[^0-9]*")
     
     def getProtoPairSize(self):
         ''' return: len(prototype positive), len(prototype negative), shape of prototypes '''
@@ -664,7 +668,7 @@ class ProtoDataset(Dataset):
         if torch.is_tensor(idx):
             idx = idx.tolist()
         
-        ids  = int(str(self.data_frame.loc[idx, self.id_name]).replace('tweet', ''))
+        ids = int(self.reg.sub("", "0" + str(self.data_frame.loc[idx, self.id_name])))
         sent  = self.data_frame.loc[idx, self.x_name]
         sent = torch.Tensor([float(s) for s in sent.split()]).float()
         
