@@ -235,7 +235,11 @@ def trainSiam():
     # a,b,c = (predictWithPairModel(TRAIN_DATA_NAME, model=model, save_z=True, out_name='Z'+os.path.basename(TRAIN_DATA_NAME)),
     #         predictWithPairModel (EVAL_DATA_NAME,  model=model, save_z=True, out_name='Z'+os.path.basename(EVAL_DATA_NAME)),
     #         predictWithPairModel (TEST_DATA_NAME,  model=model, save_z=True, out_name='Z'+os.path.basename(TEST_DATA_NAME)))
+<<<<<<< HEAD
     # del model
+=======
+    del model
+>>>>>>> 99c6eaee7c98bfcf2e965eac620385f354d8a35f
     # trainReg(a,b,c)
 
 if __name__ == '__main__':
@@ -263,9 +267,14 @@ if __name__ == '__main__':
         
     if TRAIN_CENTERS:
         params.update({'data_path':TRAIN_DATA_NAME, 'eval_data_path':EVAL_DATA_NAME})
+<<<<<<< HEAD
         # extractPrototypes(method='dql', params=params)
         projectData2D(os.path.join(DATA_FOLDER, 'train_en.csv'), use_centers=True, drops=['id', 'is_humor'])
         # predictWithPairModel(EVAL_DATA_NAME)
+=======
+        extractPrototypes(method='dql', params=params)
+        projectData2D(os.path.join(DATA_FOLDER, 'train_en.csv'), use_centers=True, drops=['id', 'is_humor', 'source', 'ground_humor'])
+>>>>>>> 99c6eaee7c98bfcf2e965eac620385f354d8a35f
         predictWithPairModel(TEST_DATA_NAME)
         
         # trainReg(

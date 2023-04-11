@@ -6,5 +6,10 @@ code/__pycache__
 __pycache__
 eval.py
 a.py
+<<<<<<< HEAD
 ens.py
 parameters.txt
+=======
+parameters.txt
+run.txt
+>>>>>>> 99c6eaee7c98bfcf2e965eac620385f354d8a35f

@@ -285,6 +285,7 @@ def projectData2D(data_path:str, save_name='2Data', drops = ['is_humor','humor_r
 		data_path:str most be a cvs file
 	'''
 	from sklearn.manifold import TSNE 
+	from sklearn.decomposition import PCA
 	
 	data = pd.read_csv(data_path)
 
@@ -310,7 +311,7 @@ def projectData2D(data_path:str, save_name='2Data', drops = ['is_humor','humor_r
 		L1, L2 = L1.shape[0], L2.shape[0]
 	print ('# Projecting', colorizar(os.path.basename(data_path)), 'in 2d vectors', end='')
 	X_embb = TSNE(n_components=2).fit_transform(np_data)
-	#X_embb = PCA(n_components=2, svd_solver='full').fit_transform(np_data)
+	# X_embb = PCA(n_components=2, svd_solver='full').fit_transform(np_data)
 	#X_embb = TruncatedSVD(n_components=2).fit_transform(np_data)
 	print ('  Done!')
 	del np_data
